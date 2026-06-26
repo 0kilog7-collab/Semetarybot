@@ -716,6 +716,8 @@ BUTTON_COOLDOWN_SECONDS = 1
 ai_messages = {}
 
 # ====== ПРОВЕРКА ПОДПИСКИ ======
+pending_sub_msg = {}  # {chat_id: message_id}
+
 def check_subscription(user_id: int) -> bool:
     try:
         member = bot.get_chat_member(CHANNEL_ID, user_id)
@@ -743,7 +745,7 @@ def require_subscription(func):
         
         if not check_subscription(user_id):
             markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("📢 ПОДПИСАТЬСЯ", url=CHANNEL_LINK))
+            markup.add(types.InlineKeyboardButton("🔍 Проверить", callback_data="check_sub"))
             
             msg = bot.send_message(
                 chat_id,
@@ -752,13 +754,7 @@ def require_subscription(func):
                 parse_mode="Markdown",
                 reply_markup=markup
             )
-            threading.Thread(
-                target=lambda: (
-                    time.sleep(10),
-                    bot.delete_message(chat_id, msg.message_id)
-                ),
-                daemon=True
-            ).start()
+            pending_sub_msg[chat_id] = msg.message_id
             return
         
         return func(message_or_call, *args, **kwargs)
@@ -1431,6 +1427,26 @@ def process_photo_prompt(message, user_id, chat_id):
             sent = bot.send_message(chat_id, "❌ Ошибка генерации фото. Попробуйте другой промпт.")
             add_ai_message(chat_id, sent.message_id)
     _run_in_thread(_do)
+
+# ====== ОБРАБОТЧИК ПРОВЕРКИ ПОДПИСКИ ======
+@bot.callback_query_handler(func=lambda call: call.data == "check_sub")
+def handle_check_subscription(call):
+    user_id = call.from_user.id
+    chat_id = call.message.chat.id
+    
+    if check_subscription(user_id):
+        # Удаляем сообщение с просьбой
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except Exception:
+            pass
+        if chat_id in pending_sub_msg:
+            del pending_sub_msg[chat_id]
+        # Показываем меню
+        send_banner_with_menu(chat_id)
+        bot.answer_callback_query(call.id, "✅ Подписка подтверждена!")
+    else:
+        bot.answer_callback_query(call.id, "❌ Вы ещё не подписались на канал!", show_alert=True)
 
 # ====== КОМАНДЫ ======
 @bot.message_handler(commands=['start'])
