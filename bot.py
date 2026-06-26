@@ -716,7 +716,7 @@ BUTTON_COOLDOWN_SECONDS = 1
 ai_messages = {}
 
 # ====== ПРОВЕРКА ПОДПИСКИ ======
-pending_sub_msg = {}  # {chat_id: message_id}
+pending_sub_msg = {}
 
 def check_subscription(user_id: int) -> bool:
     try:
@@ -724,6 +724,16 @@ def check_subscription(user_id: int) -> bool:
         return member.status in ['member', 'administrator', 'creator']
     except Exception:
         return False
+
+def check_and_remove_subscription(chat_id, user_id):
+    if chat_id in pending_sub_msg and check_subscription(user_id):
+        try:
+            bot.delete_message(chat_id, pending_sub_msg[chat_id])
+        except Exception:
+            pass
+        del pending_sub_msg[chat_id]
+        return True
+    return False
 
 def require_subscription(func):
     def wrapper(message_or_call, *args, **kwargs):
@@ -743,8 +753,12 @@ def require_subscription(func):
         if not user_id or not chat_id:
             return
         
+        if check_and_remove_subscription(chat_id, user_id):
+            return func(message_or_call, *args, **kwargs)
+        
         if not check_subscription(user_id):
-            markup = types.InlineKeyboardMarkup()
+            markup = types.InlineKeyboardMarkup(row_width=1)
+            markup.add(types.InlineKeyboardButton("📢 ПОДПИСАТЬСЯ", url=CHANNEL_LINK))
             markup.add(types.InlineKeyboardButton("🔍 Проверить", callback_data="check_sub"))
             
             msg = bot.send_message(
@@ -1435,14 +1449,12 @@ def handle_check_subscription(call):
     chat_id = call.message.chat.id
     
     if check_subscription(user_id):
-        # Удаляем сообщение с просьбой
         try:
             bot.delete_message(chat_id, call.message.message_id)
         except Exception:
             pass
         if chat_id in pending_sub_msg:
             del pending_sub_msg[chat_id]
-        # Показываем меню
         send_banner_with_menu(chat_id)
         bot.answer_callback_query(call.id, "✅ Подписка подтверждена!")
     else:
@@ -1467,7 +1479,6 @@ def send_welcome(message):
     if user_id in banned_users:
         return
     
-    # ====== ЗАКРЕПЛЁННОЕ СООБЩЕНИЕ ======
     chat_id = message.chat.id
     
     try:
