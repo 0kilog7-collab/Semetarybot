@@ -1,0 +1,6 @@
+pyrogram
+tgcrypto
+telebot
+httpx
+requests
+beautifulsoup4
