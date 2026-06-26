@@ -742,12 +742,15 @@ def require_subscription(func):
             return
         
         if not check_subscription(user_id):
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("📢 ПОДПИСАТЬСЯ", url=CHANNEL_LINK))
+            
             msg = bot.send_message(
                 chat_id,
-                f"❌ **Требуется подписка на канал!**\n\n"
-                f"Подпишись: {CHANNEL_LINK}\n\n"
-                f"После подписки нажми /start",
-                parse_mode="Markdown"
+                "🔒 **НЕ ПОТЕРЯЙТЕ БОТА**\n\n"
+                "Подпишитесь на канал, чтобы всегда быть в курсе обновлений и не потерять доступ!",
+                parse_mode="Markdown",
+                reply_markup=markup
             )
             threading.Thread(
                 target=lambda: (
@@ -1451,12 +1454,11 @@ def send_welcome(message):
     # ====== ЗАКРЕПЛЁННОЕ СООБЩЕНИЕ ======
     chat_id = message.chat.id
     
-    # Проверяем, есть ли уже закреплённое сообщение
     try:
         pinned = bot.get_chat(chat_id).pinned_message
         if not pinned or pinned.text != "🔒 **НЕ ПОТЕРЯЙТЕ БОТА**":
-            # Отправляем новое закреплённое сообщение            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("📢 ПОДПИСАТЬСЯ", url="https://t.me/+b8bOPT4JSYJhZTMy"))
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("📢 ПОДПИСАТЬСЯ", url=CHANNEL_LINK))
             
             pinned_msg = bot.send_message(
                 chat_id,
@@ -1468,11 +1470,10 @@ def send_welcome(message):
             try:
                 bot.pin_chat_message(chat_id, pinned_msg.message_id)
             except Exception:
-                pass  # Если нет прав на закрепление — просто отправим
+                pass
     except Exception:
-        # Если не удалось получить инфо о чате — отправляем без проверки
         markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("📢 ПОДПИСАТЬСЯ", url="https://t.me/+b8bOPT4JSYJhZTMy"))
+        markup.add(types.InlineKeyboardButton("📢 ПОДПИСАТЬСЯ", url=CHANNEL_LINK))
         
         pinned_msg = bot.send_message(
             chat_id,
@@ -1486,7 +1487,6 @@ def send_welcome(message):
         except Exception:
             pass
     
-    # ====== ОСНОВНОЕ МЕНЮ ======
     send_banner_with_menu(chat_id)
 
 @bot.message_handler(commands=['ppnl'])
