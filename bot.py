@@ -1714,12 +1714,29 @@ def handle_callback(call):
                 status = data.get("status")
                 ogs = data.get("ogs", [])
                 
-                if status == "success" and ogs and len(ogs) > 0:
-                    log_entry = ogs[0]
-                    ip_match = re.search(r'IP:\s*([\d.]+)', log_entry)
-                    device_match = re.search(r'Устройство:\s*([^|]+)', log_entry)
-                    ip = ip_match.group(1) if ip_match else "Неизвестно"
-                    device = device_match.group(1).strip() if device_match else "Неизвестно"
+                # Логируем ответ для отладки
+                print(f"[LOGGER DEBUG] Ответ API: {json.dumps(data, indent=2, ensure_ascii=False)}")
+                
+                if status == "success" and ogs:
+                    first_entry = ogs[0]
+                    
+                    if isinstance(first_entry, str):
+                        ip_match = re.search(r'IP:\s*([\d.]+)', first_entry)
+                        device_match = re.search(r'Устройство:\s*([^|,]+)', first_entry)
+                        ip = ip_match.group(1) if ip_match else "Неизвестно"
+                        device = device_match.group(1).strip() if device_match else "Неизвестно"
+                    elif isinstance(first_entry, dict):
+                        ip = first_entry.get("ip", "Неизвестно")
+                        device = first_entry.get("device", "Неизвестно")
+                        if ip == "Неизвестно" or device == "Неизвестно":
+                            raw = first_entry.get("raw", "") or first_entry.get("text", "") or str(first_entry)
+                            ip_match = re.search(r'IP:\s*([\d.]+)', raw)
+                            device_match = re.search(r'Устройство:\s*([^|,]+)', raw)
+                            ip = ip_match.group(1) if ip_match else "Неизвестно"
+                            device = device_match.group(1).strip() if device_match else "Неизвестно"
+                    else:
+                        ip = "Неизвестно"
+                        device = "Неизвестно"
                     
                     text = (
                         f"📊 **Лог получен!**\n\n"
