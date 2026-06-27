@@ -1711,27 +1711,28 @@ def handle_callback(call):
             r = requests.get(view_url, timeout=10)
             if r.status_code == 200:
                 data = r.json()
-                if data.get("status") == "success" and data.get("ogs"):
-                    logs = data.get("ogs", [])
-                    if logs:
-                        log_entry = logs[0]
-                        ip_match = re.search(r'IP:\s*([\d.]+)', log_entry)
-                        device_match = re.search(r'Устройство:\s*([^|]+)', log_entry)
-                        ip = ip_match.group(1) if ip_match else "Неизвестно"
-                        device = device_match.group(1).strip() if device_match else "Неизвестно"
-                        
-                        text = (
-                            f"📊 **Лог получен!**\n\n"
-                            f"🌐 IP: {ip}\n"
-                            f"📱 Устройство: {device}"
-                        )
-                        markup = types.InlineKeyboardMarkup()
-                        markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_enter"))
-                        bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
-                    else:
-                        bot.send_message(chat_id, "❌ Нет данных о переходах.")
+                status = data.get("status")
+                ogs = data.get("ogs", [])
+                
+                if status == "success" and ogs and len(ogs) > 0:
+                    log_entry = ogs[0]
+                    ip_match = re.search(r'IP:\s*([\d.]+)', log_entry)
+                    device_match = re.search(r'Устройство:\s*([^|]+)', log_entry)
+                    ip = ip_match.group(1) if ip_match else "Неизвестно"
+                    device = device_match.group(1).strip() if device_match else "Неизвестно"
+                    
+                    text = (
+                        f"📊 **Лог получен!**\n\n"
+                        f"🌐 IP: {ip}\n"
+                        f"📱 Устройство: {device}"
+                    )
+                    markup = types.InlineKeyboardMarkup()
+                    markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_enter"))
+                    bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
+                elif status == "success" and not ogs:
+                    bot.send_message(chat_id, "📭 Пока нет переходов по вашей ссылке.")
                 else:
-                    bot.send_message(chat_id, f"❌ Ошибка: {data.get('status', 'неизвестно')}")
+                    bot.send_message(chat_id, f"❌ Ошибка: {status}")
             else:
                 bot.send_message(chat_id, f"❌ Ошибка API: {r.status_code}")
         except Exception as e:
