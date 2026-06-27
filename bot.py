@@ -2132,7 +2132,7 @@ def handle_callback(call):
             bot.delete_message(chat_id, call.message.message_id)
         except:
             pass
-        msg = bot.send_message(chat_id, "✈️ Введите Telegram ID или @username:")
+        msg = bot.send_message(chat_id, "✈️ Введите Telegram ID:")
         bot.register_next_step_handler(msg, process_fanstat)
     elif call.data.startswith("generate_photo_"):
         parts = call.data.split("_")
