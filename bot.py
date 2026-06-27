@@ -1686,13 +1686,13 @@ def handle_callback(call):
                 if link and token:
                     view_url = f"{API_LOGGER_VIEW}{token}"
                     text = (
-                        f"🎭 **Ваш логгер создан!**\n\n"
-                        f"🔗 **Ссылка для отправки:**\n{link}\n\n"
-                        f"📊 **Просмотр логов:**\n{view_url}"
+                        f"🎭 Ваш логгер создан!\n\n"
+                        f"🔗 Ссылка для отправки:\n{link}\n\n"
+                        f"📊 Просмотр логов:\n{view_url}"
                     )
                     markup = types.InlineKeyboardMarkup()
                     markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_enter"))
-                    bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
+                    bot.send_message(chat_id, text, reply_markup=markup)
                 else:
                     bot.send_message(chat_id, "❌ Ошибка: не получены link или token")
             else:
