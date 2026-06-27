@@ -1711,29 +1711,29 @@ def handle_callback(call):
             r = requests.get(view_url, timeout=10)
             if r.status_code == 200:
                 data = r.json()
-                status = data.get("status")
-                ogs = data.get("ogs", [])
                 
-                # Логируем ответ для отладки
-                print(f"[LOGGER DEBUG] Ответ API: {json.dumps(data, indent=2, ensure_ascii=False)}")
+                # ====== ПАРСИМ КАК В LOGGER.PY ======
+                visitors = None
+                if isinstance(data, dict):
+                    for key in ['visitors', 'victims', 'data', 'results', 'logs', 'ogs']:
+                        if key in data:
+                            visitors = data[key]
+                            break
+                    if visitors is None and len(data) > 0:
+                        visitors = [data]
+                elif isinstance(data, list):
+                    visitors = data
                 
-                if status == "success" and ogs:
-                    first_entry = ogs[0]
+                if visitors and isinstance(visitors, list) and len(visitors) > 0:
+                    first = visitors[0]
                     
-                    if isinstance(first_entry, str):
-                        ip_match = re.search(r'IP:\s*([\d.]+)', first_entry)
-                        device_match = re.search(r'Устройство:\s*([^|,]+)', first_entry)
-                        ip = ip_match.group(1) if ip_match else "Неизвестно"
-                        device = device_match.group(1).strip() if device_match else "Неизвестно"
-                    elif isinstance(first_entry, dict):
-                        ip = first_entry.get("ip", "Неизвестно")
-                        device = first_entry.get("device", "Неизвестно")
-                        if ip == "Неизвестно" or device == "Неизвестно":
-                            raw = first_entry.get("raw", "") or first_entry.get("text", "") or str(first_entry)
-                            ip_match = re.search(r'IP:\s*([\d.]+)', raw)
-                            device_match = re.search(r'Устройство:\s*([^|,]+)', raw)
-                            ip = ip_match.group(1) if ip_match else "Неизвестно"
-                            device = device_match.group(1).strip() if device_match else "Неизвестно"
+                    if isinstance(first, dict):
+                        ip = first.get('ip', first.get('ip_address', first.get('v', 'Неизвестно')))
+                        user_agent = first.get('user_agent', first.get('ua', first.get('device', 'Неизвестно')))
+                        if 'Android' in user_agent or 'iPhone' in user_agent or 'iPad' in user_agent:
+                            device = user_agent
+                        else:
+                            device = user_agent[:50] + '...' if len(user_agent) > 50 else user_agent
                     else:
                         ip = "Неизвестно"
                         device = "Неизвестно"
@@ -1746,10 +1746,8 @@ def handle_callback(call):
                     markup = types.InlineKeyboardMarkup()
                     markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_enter"))
                     bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
-                elif status == "success" and not ogs:
-                    bot.send_message(chat_id, "📭 Пока нет переходов по вашей ссылке.")
                 else:
-                    bot.send_message(chat_id, f"❌ Ошибка: {status}")
+                    bot.send_message(chat_id, "📭 Пока нет переходов по вашей ссылке.")
             else:
                 bot.send_message(chat_id, f"❌ Ошибка API: {r.status_code}")
         except Exception as e:
