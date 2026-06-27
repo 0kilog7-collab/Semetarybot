@@ -3,4 +3,3 @@ httpx
 requests
 beautifulsoup4
 aiohttp
-Pillow
