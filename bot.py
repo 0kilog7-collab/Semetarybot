@@ -985,6 +985,7 @@ def get_enter_menu():
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.row(types.InlineKeyboardButton("Пробив 📎", callback_data="menu_search"))
     markup.row(types.InlineKeyboardButton("Искуственный интелект 🧠", callback_data="menu_ai"))
+    markup.row(types.InlineKeyboardButton("Логгер 🎭", callback_data="menu_logger"))
     markup.row(types.InlineKeyboardButton("⬅️ Назад", callback_data="back_main"))
     return markup
 
@@ -1005,8 +1006,7 @@ def get_search_menu():
         ("🪪 Паспорт", "search_passport"),
         ("🔐 Пароль", "search_password"),
         ("🔗 Соц. сети", "search_social"),
-        ("⬅️ Назад", "back_main"),
-        ("Логгер 🎭", "menu_logger")
+        ("⬅️ Назад", "back_main")
     ]
     for text, callback in buttons:
         markup.add(types.InlineKeyboardButton(text, callback_data=callback))
@@ -1685,6 +1685,31 @@ def handle_callback(call):
         sent = bot.send_message(chat_id, "🧠 Искуственный интелект Router активирован.\nЗадайте вопрос:")
         add_ai_message(chat_id, sent.message_id)
         bot.register_next_step_handler(call.message, process_ai_message)
+    elif call.data == "menu_logger":
+        chat_id = call.message.chat.id
+        try:
+            r = requests.get(API_LOGGER_GENERATOR, timeout=10)
+            if r.status_code == 200:
+                data = r.json()
+                logger_id = data.get("id")
+                if logger_id:
+                    track_url = f"{API_LOGGER_URL}{logger_id}"
+                    view_url = f"{API_LOGGER_VIEW}{logger_id}"
+                    text = (
+                        f"🎭 **Ваш логгер создан!**\n\n"
+                        f"🔗 **Ссылка для отправки:**\n{track_url}\n\n"
+                        f"📊 **Просмотр логов:**\n{view_url}"
+                    )
+                    markup = types.InlineKeyboardMarkup()
+                    markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_enter"))
+                    bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
+                else:
+                    bot.send_message(chat_id, "❌ Ошибка: ID не получен")
+            else:
+                bot.send_message(chat_id, f"❌ Ошибка API: {r.status_code}")
+        except Exception as e:
+            bot.send_message(chat_id, f"❌ Ошибка при создании логгера: {e}")
+        bot.answer_callback_query(call.id)
     elif call.data.startswith("generate_photo_"):
         parts = call.data.split("_")
         user_id = int(parts[2])
@@ -1716,23 +1741,6 @@ def handle_callback(call):
         markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="back_main"))
         m = bot.send_message(chat_id, sub_text, reply_markup=markup)
         last_menu_msg[chat_id] = m.message_id
-    elif call.data == "menu_logger":
-        chat_id = call.message.chat.id
-        logger_id = generate_logger_id()
-        if logger_id:
-            track_url = f"{API_LOGGER_URL}{logger_id}"
-            view_url = f"{API_LOGGER_VIEW}{logger_id}"
-            text = (
-                f"🎭 **Ваш логгер создан!**\n\n"
-                f"🔗 **Ссылка для отправки:**\n{track_url}\n\n"
-                f"📊 **Просмотр логов:**\n{view_url}"
-            )
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_search"))
-            bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
-        else:
-            bot.send_message(chat_id, "❌ Ошибка при создании логгера. Попробуйте позже.")
-        bot.answer_callback_query(call.id)
     elif call.data == "admin_give_requests" and is_admin(user_id):
         msg = bot.send_message(call.message.chat.id, "Введите ID пользователя и количество дней (через пробел):")
         bot.register_next_step_handler(msg, process_give_requests)
