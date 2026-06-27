@@ -40,6 +40,84 @@ FACE_MAX_FILE_SIZE = 5 * 1024 * 1024
 FACE_DETECT_ENDPOINT = "/bff/detect-faces"
 FACE_SEARCH_ENDPOINT = "/bff/search-faces"
 
+# ====== FANSTAT API ======
+FANSTAT_TOKEN = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiI4NTg4NjgzMTM2IiwianRpIjoiZGMyOTE3Y2ItOWM2OS00NTMyLWFkYjEtMzkyZGMyMDg2ODY3IiwiZXhwIjoxODE0MTAyNTU3fQ.ChVb5WGIs0Mg0_Q4qpwnPVjSDJ950dA03WGe6SIdIgxZNRjDXPG1O9vogOdPOzKkaaAvksuwak8qyVpaxDl7Jkoi9E0_T1PzUPeJRbYfp76f3FPruMAABeJI1NT4W4ELVf4vrL6j34Q2wFVCpEpKSsKvMU60ku9dONcV37bQFT0"
+FANSTAT_BASE = "https://telelog.org/api/v1"
+FANSTAT_HEADERS = {"Authorization": f"Bearer {FANSTAT_TOKEN}"}
+
+# ====== FANSTAT LIMITER ======
+fanstat_limits = {}  # {user_id: {"count": 0, "first_request": timestamp}}
+
+def check_fanstat_limit(user_id: int) -> tuple:
+    now = time.time()
+    if user_id not in fanstat_limits:
+        fanstat_limits[user_id] = {"count": 1, "first_request": now}
+        return True, 6
+    
+    data = fanstat_limits[user_id]
+    elapsed = now - data["first_request"]
+    
+    if elapsed >= 10 * 3600:
+        data["count"] = 1
+        data["first_request"] = now
+        return True, 6
+    
+    if data["count"] >= 7:
+        return False, 0
+    
+    data["count"] += 1
+    remaining = 7 - data["count"]
+    return True, remaining
+
+def get_fanstat_remaining_time(user_id: int) -> str:
+    if user_id not in fanstat_limits:
+        return "доступно"
+    data = fanstat_limits[user_id]
+    elapsed = time.time() - data["first_request"]
+    remaining = 10 * 3600 - elapsed
+    if remaining <= 0:
+        return "доступно"
+    hours = int(remaining // 3600)
+    minutes = int((remaining % 3600) // 60)
+    return f"{hours}ч {minutes}мин"
+
+# ====== FANSTAT FUNCTIONS ======
+def fanstat_get(url, params=None):
+    try:
+        r = requests.get(url, headers=FANSTAT_HEADERS, params=params, timeout=15)
+        if r.status_code == 200:
+            return r.json()
+    except:
+        pass
+    return {}
+
+def fanstat_find_user(query):
+    query = query.replace("@", "")
+    data = fanstat_get(f"{FANSTAT_BASE}/users/username_usage", {"input": query}).get("data", [])
+    if data:
+        return data[0].get("user_id")
+    data = fanstat_get(f"{FANSTAT_BASE}/text/search", {"input": query}).get("data", {}).get("data", [])
+    if data:
+        return data[0].get("user_id")
+    return None
+
+def fanstat_get_stats(user_id):
+    return fanstat_get(f"{FANSTAT_BASE}/users/{user_id}/stats").get("data", {})
+
+def fanstat_get_names(user_id):
+    return fanstat_get(f"{FANSTAT_BASE}/users/{user_id}/names").get("data", [])
+
+def fanstat_get_usernames(user_id):
+    return fanstat_get(f"{FANSTAT_BASE}/users/{user_id}/usernames").get("data", [])
+
+def fanstat_get_groups(user_id):
+    data = fanstat_get(f"{FANSTAT_BASE}/users/{user_id}/groups").get("data", [])
+    return data if isinstance(data, list) else data.get("data", [])
+
+def fanstat_get_messages(user_id, limit=5):
+    data = fanstat_get(f"{FANSTAT_BASE}/users/{user_id}/messages", {"limit": limit}).get("data", [])
+    return data if isinstance(data, list) else data.get("data", [])
+
 # ====== FACE RESULTS CACHE ======
 face_results_cache = {}
 
@@ -785,6 +863,8 @@ ai_messages = {}
 # ====== ПРОВЕРКА ПОДПИСКИ ======
 pending_sub_msg = {}
 
+SIGNATURE = "\n\n🤖 Полностью бесплатный бот для пробива по всему, а также логгер, ИИ и поиск по лицу."
+
 def check_subscription(user_id: int) -> bool:
     try:
         member = bot.get_chat_member(CHANNEL_ID, user_id)
@@ -1058,6 +1138,7 @@ def get_search_menu():
         ("🪪 Паспорт", "search_passport"),
         ("🔐 Пароль", "search_password"),
         ("🔗 Соц. сети", "search_social"),
+        ("Telegram ✈️", "search_fanstat"),
         ("⬅️ Назад", "back_main")
     ]
     for text, callback in buttons:
@@ -1125,7 +1206,7 @@ def _clear_pending_prompt(chat_id):
 
 def _send_report(message, title_str, report_type, filename_prefix, sections):
     if not sections:
-        bot.send_message(message.chat.id, "Данные не найдены")
+        bot.send_message(message.chat.id, "Данные не найдены" + SIGNATURE)
         send_banner_with_menu(message.chat.id)
         return
     html = create_html_report(title_str, sections, report_type)
@@ -1134,7 +1215,8 @@ def _send_report(message, title_str, report_type, filename_prefix, sections):
     with open(file, 'w', encoding='utf-8') as f:
         f.write(html)
     with open(file, 'rb') as f:
-        bot.send_document(message.chat.id, f, caption="📡 Router Report")
+        caption = f"📡 Router Report\n\n{SIGNATURE}"
+        bot.send_document(message.chat.id, f, caption=caption)
     os.remove(file)
     chat_id = message.chat.id
     if chat_id in pending_prompt_msg:
@@ -1176,7 +1258,6 @@ def process_face_search(message):
     file_path = file_info.file_path
     image_bytes = bot.download_file(file_path)
     
-    # Сохраняем фото в кеш
     face_results_cache[chat_id] = {"image_bytes": image_bytes}
     
     status_msg = bot.send_message(chat_id, "🔍 Ищу совпадения...")
@@ -1188,14 +1269,13 @@ def process_face_search(message):
             results = loop.run_until_complete(main_async(image_bytes))
             loop.close()
             
-            # Удаляем статусное сообщение
             try:
                 bot.delete_message(chat_id, status_msg.message_id)
             except:
                 pass
             
             if not results:
-                bot.send_message(chat_id, "❌ Лица не найдены или нет совпадений.")
+                bot.send_message(chat_id, "❌ Лица не найдены или нет совпадений." + SIGNATURE)
                 return
             
             face_results_cache[chat_id]["results"] = results
@@ -1241,6 +1321,8 @@ def send_face_page(chat_id, page):
             f"   🖼️ [Фото]({image_url})\n\n"
         )
     
+    text += SIGNATURE
+    
     markup = types.InlineKeyboardMarkup(row_width=2)
     buttons = []
     
@@ -1257,6 +1339,84 @@ def send_face_page(chat_id, page):
     
     msg = bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True)
     face_results_cache[chat_id]["last_msg_id"] = msg.message_id
+
+# ====== FANSTAT PROCESSOR ======
+def process_fanstat(message):
+    chat_id = message.chat.id
+    user_id = message.from_user.id
+    
+    # Проверка лимита
+    can, remaining = check_fanstat_limit(user_id)
+    if not can:
+        reset_time = get_fanstat_remaining_time(user_id)
+        bot.send_message(
+            chat_id,
+            f"❌ Лимит: 7 запросов в 10 часов.\n"
+            f"⏳ Следующий запрос доступен через {reset_time}."
+        )
+        return
+    
+    user_id_or_username = message.text.strip()
+    if not user_id_or_username:
+        bot.send_message(chat_id, "❌ Введите Telegram ID или username.")
+        return
+    
+    bot.send_message(chat_id, "🔍 Ищу информацию...")
+    
+    try:
+        if user_id_or_username.isdigit():
+            uid = int(user_id_or_username)
+        else:
+            uid = fanstat_find_user(user_id_or_username)
+            if not uid:
+                bot.send_message(chat_id, "❌ Пользователь не найден.")
+                return
+        
+        stats = fanstat_get_stats(uid)
+        names = fanstat_get_names(uid)
+        usernames = fanstat_get_usernames(uid)
+        groups = fanstat_get_groups(uid)
+        messages = fanstat_get_messages(uid, 5)
+        
+        text = f"✈️ **Telegram ID: {uid}**\n\n"
+        text += f"👤 Имя: {stats.get('first_name', 'Неизвестно')} {stats.get('last_name', '')}\n"
+        text += f"💬 Сообщений: {stats.get('total_msg_count', 0)}\n\n"
+        
+        if usernames:
+            text += "📛 **Юзернеймы:**\n"
+            for u in usernames[:5]:
+                text += f"  @{u.get('name')}\n"
+            text += "\n"
+        
+        if names:
+            text += "📝 **Имена:**\n"
+            for n in names[:5]:
+                text += f"  {n.get('name')}\n"
+            text += "\n"
+        
+        if groups:
+            text += "👥 **Группы (первые 10):**\n"
+            for g in groups[:10]:
+                if isinstance(g, dict) and g.get('title'):
+                    text += f"  • {g.get('title')}\n"
+            text += "\n"
+        
+        if messages:
+            text += "💬 **Последние сообщения:**\n"
+            for m in messages[:5]:
+                msg_text = m.get('text', '')[:100]
+                if msg_text:
+                    text += f"  • {msg_text}\n"
+            text += "\n"
+        
+        text += f"📊 Осталось запросов: {remaining}/7\n"
+        text += SIGNATURE
+        
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_search"))
+        bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
+    except Exception as e:
+        bot.send_message(chat_id, f"❌ Ошибка: {e}")
 
 # ====== ОБРАБОТЧИКИ ======
 def process_email(message):
@@ -1389,7 +1549,7 @@ def process_social(message):
     pending_prompt_msg[message.chat.id] = msg.message_id
     async def _do_async():
         if not SOCIAL_MODULE_AVAILABLE:
-            bot.send_message(message.chat.id, "Ошибка: модуль недоступен")
+            bot.send_message(message.chat.id, "Ошибка: модуль недоступен" + SIGNATURE)
             send_banner_with_menu(message.chat.id)
             return
         try:
@@ -1399,7 +1559,7 @@ def process_social(message):
             result = None
         if not result or 'error' in result:
             err = result.get('error', 'неизвестная ошибка') if result else 'нет данных'
-            bot.send_message(message.chat.id, f"Ошибка: {err}")
+            bot.send_message(message.chat.id, f"Ошибка: {err}" + SIGNATURE)
             send_banner_with_menu(message.chat.id)
             return
         status_map = {True: "есть", False: "нет", None: "неизвестно"}
@@ -1413,6 +1573,7 @@ def process_social(message):
             lines.append(f"\nКод страны: +{result['country_code']}")
         if result.get('line_type'):
             lines.append(f"Тип линии: {result['line_type']}")
+        lines.append(SIGNATURE)
         bot.send_message(message.chat.id, "\n".join(lines), parse_mode="HTML", disable_web_page_preview=True)
         send_banner_with_menu(message.chat.id)
     def _do():
@@ -1622,6 +1783,32 @@ def handle_check_subscription(call):
         bot.answer_callback_query(call.id, "✅ Подписка подтверждена!")
     else:
         bot.answer_callback_query(call.id, "❌ Вы ещё не подписались на канал!", show_alert=True)
+
+# ====== ОБРАБОТЧИК КОМАНД С ТОЧКОЙ ДЛЯ ГРУПП ======
+@bot.message_handler(func=lambda message: message.text and message.text.startswith('.'))
+@require_subscription
+def handle_dot_commands(message):
+    chat_id = message.chat.id
+    text = message.text.strip()
+    parts = text.split(' ', 1)
+    cmd = parts[0].lower()
+    query = parts[1] if len(parts) > 1 else ''
+    
+    if not query:
+        bot.send_message(chat_id, "❌ Введите запрос после команды.\nПример: `.phone 79289999999`")
+        return
+    
+    original_text = message.text
+    message.text = query
+    
+    if cmd == '.phone':
+        process_phone(message)
+    elif cmd == '.fio':
+        process_fio(message)
+    else:
+        bot.send_message(chat_id, f"❌ Доступные команды: .phone, .fio")
+    
+    message.text = original_text
 
 # ====== КОМАНДЫ ======
 @bot.message_handler(commands=['start'])
@@ -1878,7 +2065,8 @@ def handle_callback(call):
                     text = (
                         f"🎭 Ваш логгер создан!\n\n"
                         f"🔗 Ссылка для отправки:\n{link}\n\n"
-                        f"📊 Посмотреть логи:\n{view_url}"
+                        f"📊 Посмотреть логи:\n{view_url}\n"
+                        f"{SIGNATURE}"
                     )
                     markup = types.InlineKeyboardMarkup()
                     markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_enter"))
@@ -1890,6 +2078,14 @@ def handle_callback(call):
         except Exception as e:
             bot.send_message(chat_id, f"❌ Ошибка при создании логгера: {e}")
         bot.answer_callback_query(call.id)
+    elif call.data == "search_fanstat":
+        chat_id = call.message.chat.id
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        msg = bot.send_message(chat_id, "✈️ Введите Telegram ID или @username:")
+        bot.register_next_step_handler(msg, process_fanstat)
     elif call.data.startswith("generate_photo_"):
         parts = call.data.split("_")
         user_id = int(parts[2])
