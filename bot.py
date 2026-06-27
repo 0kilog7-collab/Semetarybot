@@ -667,17 +667,6 @@ def sync_search_nick(query, cfg):    return run_async(search_nick(query, cfg))
 def sync_search_egrul(inn, cfg):     return run_async(search_egrul(inn, cfg))
 def sync_search_simple(ep, q, cfg):  return run_async(search_simple(ep, q, cfg))
 
-# ====== ЛОГГЕР ======
-def generate_logger_id() -> Optional[str]:
-    try:
-        r = requests.get(API_LOGGER_GENERATOR, timeout=10)
-        if r.status_code == 200:
-            data = r.json()
-            return data.get("id")
-    except Exception:
-        pass
-    return None
-
 # ====== ОСНОВНЫЕ НАСТРОЙКИ ======
 BOT_TOKEN = BOT_TOKEN_CFG
 ADMIN_IDS = ADMIN_IDS_CFG
@@ -1691,20 +1680,21 @@ def handle_callback(call):
             r = requests.get(API_LOGGER_GENERATOR, timeout=10)
             if r.status_code == 200:
                 data = r.json()
-                logger_id = data.get("id")
-                if logger_id:
-                    track_url = f"{API_LOGGER_URL}{logger_id}"
-                    view_url = f"{API_LOGGER_VIEW}{logger_id}"
+                link = data.get("link")
+                token = data.get("token")
+                
+                if link and token:
+                    view_url = f"{API_LOGGER_VIEW}{token}"
                     text = (
                         f"🎭 **Ваш логгер создан!**\n\n"
-                        f"🔗 **Ссылка для отправки:**\n{track_url}\n\n"
+                        f"🔗 **Ссылка для отправки:**\n{link}\n\n"
                         f"📊 **Просмотр логов:**\n{view_url}"
                     )
                     markup = types.InlineKeyboardMarkup()
                     markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_enter"))
                     bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
                 else:
-                    bot.send_message(chat_id, "❌ Ошибка: ID не получен")
+                    bot.send_message(chat_id, "❌ Ошибка: не получены link или token")
             else:
                 bot.send_message(chat_id, f"❌ Ошибка API: {r.status_code}")
         except Exception as e:
