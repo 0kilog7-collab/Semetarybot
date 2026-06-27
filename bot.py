@@ -13,7 +13,6 @@ from datetime import datetime, timedelta
 from collections import defaultdict
 from typing import Optional, Any
 from pathlib import Path
-from PIL import Image
 
 import telebot
 from telebot import types
@@ -35,7 +34,7 @@ API_LOGGER_URL = "http://loslsk.pythonanywhere.com/track?id="
 API_LOGGER_GENERATOR = "http://loslsk.pythonanywhere.com/api/generate?api_key=urjw0fkwkekc939hrjw92"
 API_LOGGER_VIEW = "http://loslsk.pythonanywhere.com/api?api_key=urjw0fkwkekc939hrjw92&view="
 
-# ====== FACE SEARCH ======
+# ====== FACE SEARCH (БЕЗ PIL) ======
 FACE_API_BASE = "https://similarfaces.me"
 FACE_MAX_FILE_SIZE = 5 * 1024 * 1024
 FACE_DETECT_ENDPOINT = "/bff/detect-faces"
@@ -94,79 +93,53 @@ try:
 except ImportError:
     ZVONILI_MODULE_AVAILABLE = False
 
-# ====== FACE SEARCH FUNCTIONS ======
+# ====== FACE SEARCH FUNCTIONS (БЕЗ PIL) ======
 def generate_frontend_id():
     t = int(time.time() / 60)
     msg = f"{t}:detect-faces".encode()
     return hashlib.sha256(msg).hexdigest()
 
-async def detect_faces_api(session, image_path, frontend_id):
-    if not os.path.exists(image_path) or os.path.getsize(image_path) > FACE_MAX_FILE_SIZE:
+async def detect_faces_api(session, image_bytes, frontend_id):
+    if len(image_bytes) > FACE_MAX_FILE_SIZE:
         return []
     data = aiohttp.FormData()
-    with open(image_path, 'rb') as f:
-        data.add_field('image', f, filename=os.path.basename(image_path), content_type='image/jpeg')
-        headers = {'X-Frontend-ID': frontend_id}
-        try:
-            async with session.post(f"{FACE_API_BASE}{FACE_DETECT_ENDPOINT}", headers=headers, data=data) as resp:
-                if resp.status != 200:
-                    return []
-                result = await resp.json()
-                return result.get("faces", [])
-        except Exception:
-            return []
-
-async def crop_face_async(image_path, bbox):
+    data.add_field('image', image_bytes, filename='face.jpg', content_type='image/jpeg')
+    headers = {'X-Frontend-ID': frontend_id}
     try:
-        loop = asyncio.get_event_loop()
-        def crop_sync():
-            with Image.open(image_path) as img:
-                x1, y1, x2, y2 = bbox
-                face = img.crop((x1, y1, x2, y2))
-                with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp:
-                    face.save(tmp.name, "JPEG", quality=95)
-                    return tmp.name
-        return await loop.run_in_executor(None, crop_sync)
+        async with session.post(f"{FACE_API_BASE}{FACE_DETECT_ENDPOINT}", headers=headers, data=data) as resp:
+            if resp.status != 200:
+                return []
+            result = await resp.json()
+            return result.get("faces", [])
     except Exception:
-        return None
+        return []
 
-async def search_face_api(session, face_path, frontend_id):
+async def search_face_api(session, image_bytes, frontend_id):
     data = aiohttp.FormData()
-    with open(face_path, 'rb') as f:
-        data.add_field('image', f, filename=os.path.basename(face_path), content_type='image/jpeg')
-        headers = {'X-Frontend-ID': frontend_id}
-        try:
-            async with session.post(f"{FACE_API_BASE}{FACE_SEARCH_ENDPOINT}", headers=headers, data=data) as resp:
-                if resp.status != 200:
-                    return []
-                result = await resp.json()
-                return result.get("results", [])
-        except Exception:
-            return []
+    data.add_field('image', image_bytes, filename='face.jpg', content_type='image/jpeg')
+    headers = {'X-Frontend-ID': frontend_id}
+    try:
+        async with session.post(f"{FACE_API_BASE}{FACE_SEARCH_ENDPOINT}", headers=headers, data=data) as resp:
+            if resp.status != 200:
+                return []
+            result = await resp.json()
+            return result.get("results", [])
+    except Exception:
+        return []
 
-async def process_single_image(session, image_path):
+async def process_single_image(session, image_bytes):
     frontend_id = generate_frontend_id()
-    faces = await detect_faces_api(session, image_path, frontend_id)
+    faces = await detect_faces_api(session, image_bytes, frontend_id)
     if not faces:
         return []
-    tasks = []
-    for bbox in faces:
-        face_path = await crop_face_async(image_path, bbox)
-        if face_path:
-            tasks.append(search_face_api(session, face_path, frontend_id))
-    if not tasks:
-        return []
-    results = await asyncio.gather(*tasks)
-    all_results = []
-    for r in results:
-        all_results.extend(r)
-    return all_results
+    results = await search_face_api(session, image_bytes, frontend_id)
+    return results
 
-async def main_async(image_path):
+async def main_async(image_bytes):
     conn = aiohttp.TCPConnector(limit=30, limit_per_host=15)
     timeout = aiohttp.ClientTimeout(total=30)
     async with aiohttp.ClientSession(connector=conn, timeout=timeout) as session:
-        results = await process_single_image(session, image_path)
+        results = await process_single_image(session, image_bytes)
         return results
 
 # ====== CRYVEN ======
@@ -1188,7 +1161,7 @@ def check_button_spam(user_id: int) -> bool:
     button_cooldowns[user_id] = now
     return False
 
-# ====== FACE SEARCH PROCESSOR ======
+# ====== FACE SEARCH PROCESSOR (БЕЗ PIL) ======
 def process_face_search(message):
     chat_id = message.chat.id
     if not message.photo:
@@ -1198,11 +1171,7 @@ def process_face_search(message):
     file_id = message.photo[-1].file_id
     file_info = bot.get_file(file_id)
     file_path = file_info.file_path
-    downloaded_file = bot.download_file(file_path)
-    
-    with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp:
-        tmp.write(downloaded_file)
-        tmp_path = tmp.name
+    image_bytes = bot.download_file(file_path)
     
     bot.send_message(chat_id, "🔍 Ищу совпадения...")
     
@@ -1210,12 +1179,11 @@ def process_face_search(message):
         try:
             loop = asyncio.new_event_loop()
             asyncio.set_event_loop(loop)
-            results = loop.run_until_complete(main_async(tmp_path))
+            results = loop.run_until_complete(main_async(image_bytes))
             loop.close()
             
             if not results:
                 bot.send_message(chat_id, "❌ Лица не найдены или нет совпадений.")
-                os.unlink(tmp_path)
                 return
             
             text = f"🔍 **Найдено {len(results)} совпадений:**\n\n"
@@ -1235,10 +1203,8 @@ def process_face_search(message):
             markup = types.InlineKeyboardMarkup()
             markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_enter"))
             bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
-            os.unlink(tmp_path)
         except Exception as e:
             bot.send_message(chat_id, f"❌ Ошибка: {e}")
-            os.unlink(tmp_path)
     
     threading.Thread(target=_do_search, daemon=True).start()
 
