@@ -40,13 +40,16 @@ FACE_MAX_FILE_SIZE = 5 * 1024 * 1024
 FACE_DETECT_ENDPOINT = "/bff/detect-faces"
 FACE_SEARCH_ENDPOINT = "/bff/search-faces"
 
-# ====== FANSTAT API ======
-FANSTAT_TOKEN = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiI4NTg4NjgzMTM2IiwianRpIjoiZGMyOTE3Y2ItOWM2OS00NTMyLWFkYjEtMzkyZGMyMDg2ODY3IiwiZXhwIjoxODE0MTAyNTU3fQ.ChVb5WGIs0Mg0_Q4qpwnPVjSDJ950dA03WGe6SIdIgxZNRjDXPG1O9vogOdPOzKkaaAvksuwak8qyVpaxDl7Jkoi9E0_T1PzUPeJRbYfp76f3FPruMAABeJI1NT4W4ELVf4vrL6j34Q2wFVCpEpKSsKvMU60ku9dONcV37bQFT0"
-FANSTAT_BASE = "https://telelog.org/api/v1"
-FANSTAT_HEADERS = {"Authorization": f"Bearer {FANSTAT_TOKEN}"}
+# ====== FANSTAT API (из project.py) ======
+FUNSTAT_TOKEN = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiI3NjcyMDkyMDIzIiwianRpIjoiY2I4YWIzMjEtNGUwMi00NmM2LTkyODAtYjAyZGMzNjBlY2U3IiwiZXhwIjoxODEzMzQ4NzM0fQ.ZvbeqetyRiOTi9LM3pfRyr7mC6_lx4t46rVi7GWQQ0xkWmGPmJyxmo8R6DOF1s8Bne0W--LtzgP63R6uKNjFF9mpCmKQilPAwUvGWjjaDkDi9A9FZW2dTEmx2odeULFgQZTsc8FeC5D909IdvZCdiTbesvdFnGLsIi-DDOyj33U"
+FUNSTAT_API_URL = "https://funstat.info/api/v1"
+
+# ====== FACE RESULTS CACHE ======
+face_results_cache = {}
 
 # ====== FANSTAT LIMITER ======
 fanstat_limits = {}  # {user_id: {"count": 0, "first_request": timestamp}}
+DAILY_LIMIT = 3
 
 def check_fanstat_limit(user_id: int) -> tuple:
     now = time.time()
@@ -81,45 +84,101 @@ def get_fanstat_remaining_time(user_id: int) -> str:
     minutes = int((remaining % 3600) // 60)
     return f"{hours}ч {minutes}мин"
 
-# ====== FANSTAT FUNCTIONS ======
-def fanstat_get(url, params=None):
+# ====== FANSTAT FUNCTIONS (из project.py) ======
+async def search_telegram_user_id(user_id: str) -> dict:
+    user_id = user_id.lower().replace('id', '').strip()
+    if not user_id.isdigit():
+        return {'success': False, 'error': 'Неверный ID'}
+
+    headers = {"Authorization": f"Bearer {FUNSTAT_TOKEN}", "Accept": "application/json"}
+    url_stats = f"{FUNSTAT_API_URL}/users/{user_id}/stats"
+    url_names = f"{FUNSTAT_API_URL}/users/{user_id}/names"
+    url_usernames = f"{FUNSTAT_API_URL}/users/{user_id}/usernames"
+
+    async with aiohttp.ClientSession() as session:
+        try:
+            tasks = [
+                session.get(url_stats, headers=headers, timeout=30),
+                session.get(url_names, headers=headers, timeout=30),
+                session.get(url_usernames, headers=headers, timeout=30)
+            ]
+            responses = await asyncio.gather(*tasks, return_exceptions=True)
+
+            result_data = {'success': True, 'data': {'stats': None, 'names': [], 'usernames': []}}
+
+            for i, resp in enumerate(responses):
+                if isinstance(resp, Exception) or not hasattr(resp, 'status') or resp.status != 200:
+                    continue
+                try:
+                    data = await resp.json()
+                    if i == 0 and data.get('success'):
+                        result_data['data']['stats'] = data.get('data')
+                    elif i == 1 and data.get('success'):
+                        result_data['data']['names'] = data.get('data', [])
+                    elif i == 2 and data.get('success'):
+                        result_data['data']['usernames'] = data.get('data', [])
+                except:
+                    pass
+            return result_data
+        except Exception as e:
+            return {'success': False, 'error': str(e)}
+
+def format_date(date_str):
     try:
-        r = requests.get(url, headers=FANSTAT_HEADERS, params=params, timeout=15)
-        if r.status_code == 200:
-            return r.json()
+        if date_str:
+            date_obj = datetime.fromisoformat(date_str.replace('Z', '+00:00'))
+            return date_obj.strftime('%d.%m.%Y')
     except:
         pass
-    return {}
+    return "Нет данных"
 
-def fanstat_find_user(query):
-    query = query.replace("@", "")
-    data = fanstat_get(f"{FANSTAT_BASE}/users/username_usage", {"input": query}).get("data", [])
-    if data:
-        return data[0].get("user_id")
-    data = fanstat_get(f"{FANSTAT_BASE}/text/search", {"input": query}).get("data", {}).get("data", [])
-    if data:
-        return data[0].get("user_id")
-    return None
+def format_telegram_result_html(data: dict, query: str) -> str:
+    result = ["🔍 <b>Информация о пользователе</b>", "=" * 30 + "\n"]
+    stats = data.get('stats', {})
 
-def fanstat_get_stats(user_id):
-    return fanstat_get(f"{FANSTAT_BASE}/users/{user_id}/stats").get("data", {})
+    if not stats:
+        result.append("❌ <b>Пользователь не найден в базе данных!</b>")
+        return "\n".join(result)
 
-def fanstat_get_names(user_id):
-    return fanstat_get(f"{FANSTAT_BASE}/users/{user_id}/names").get("data", [])
+    result.append(f"🆔 ID: <code>{stats.get('id', '')}</code>")
+    if stats.get('first_name'): result.append(f"👤 Имя: {stats.get('first_name')}")
+    if stats.get('last_name'): result.append(f"📝 Фамилия: {stats.get('last_name')}")
+    if stats.get('is_bot'): result.append(f"🤖 Бот: {'Да' if stats.get('is_bot') else 'Нет'}")
+    if stats.get('is_active'): result.append(f"✅ Активен: {'Да' if stats.get('is_active') else 'Нет'}")
+    if stats.get('first_msg_date'): result.append(f"📅 Первое сообщение: {format_date(stats.get('first_msg_date'))}")
+    if stats.get('last_msg_date'): result.append(f"📅 Последнее сообщение: {format_date(stats.get('last_msg_date'))}")
+    if stats.get('total_msg_count'): result.append(f"💬 Всего сообщений: {stats.get('total_msg_count')}")
+    if stats.get('total_groups'): result.append(f"📊 Групп: {stats.get('total_groups')}")
+    if stats.get('usernames_count'): result.append(f"📛 Username использовано: {stats.get('usernames_count')}")
+    if stats.get('names_count'): result.append(f"📝 Имён использовано: {stats.get('names_count')}")
+    if stats.get('adm_in_groups'): result.append(f"👑 Администратор в группах: {stats.get('adm_in_groups')}")
+    if stats.get('is_premium'): result.append(f"⭐ Премиум: {'Да' if stats.get('is_premium') else 'Нет'}")
+    if stats.get('is_verified'): result.append(f"✔️ Верифицирован: {'Да' if stats.get('is_verified') else 'Нет'}")
 
-def fanstat_get_usernames(user_id):
-    return fanstat_get(f"{FANSTAT_BASE}/users/{user_id}/usernames").get("data", [])
+    result.append("")
+    names = data.get('names', [])
+    if names:
+        result.append(f"📝 <b>История имен:</b> ({len(names)})")
+        for i, item in enumerate(names, 1):
+            name = item.get('name', 'Не указано')
+            date = format_date(item.get('date_time', ''))
+            result.append(f"{'└' if i == len(names) else '├'} {date} -> {name}")
+    else:
+        result.append("📝 <b>История имен:</b> Нет данных")
 
-def fanstat_get_groups(user_id):
-    data = fanstat_get(f"{FANSTAT_BASE}/users/{user_id}/groups").get("data", [])
-    return data if isinstance(data, list) else data.get("data", [])
+    result.append("")
+    usernames = data.get('usernames', [])
+    if usernames:
+        result.append(f"📛 <b>История юзернеймов:</b> ({len(usernames)})")
+        for i, item in enumerate(usernames, 1):
+            name = item.get('name', '')
+            date = format_date(item.get('date_time', ''))
+            if name:
+                result.append(f"{'└' if i == len(usernames) else '├'} {date} -> @{name}")
+    else:
+        result.append("📛 <b>История юзернеймов:</b> Нет данных")
 
-def fanstat_get_messages(user_id, limit=5):
-    data = fanstat_get(f"{FANSTAT_BASE}/users/{user_id}/messages", {"limit": limit}).get("data", [])
-    return data if isinstance(data, list) else data.get("data", [])
-
-# ====== FACE RESULTS CACHE ======
-face_results_cache = {}
+    return "\n".join(result)
 
 # ====== СПИСОК ЗАБЛОКИРОВАННЫХ ======
 BLOCKED_USERS = [
@@ -863,7 +922,7 @@ ai_messages = {}
 # ====== ПРОВЕРКА ПОДПИСКИ ======
 pending_sub_msg = {}
 
-SIGNATURE = "\n\n🤖 Полностью бесплатный бот для пробива по всему, а также логгер, ИИ и поиск по лицу."
+SIGNATURE = "\n\nАктуал бот - https://t.me/+b4who5MU-MZlNDAy"
 
 def check_subscription(user_id: int) -> bool:
     try:
@@ -1340,83 +1399,72 @@ def send_face_page(chat_id, page):
     msg = bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True)
     face_results_cache[chat_id]["last_msg_id"] = msg.message_id
 
-# ====== FANSTAT PROCESSOR ======
+# ====== FANSTAT PROCESSOR (из project.py) ======
 def process_fanstat(message):
     chat_id = message.chat.id
     user_id = message.from_user.id
-    
-    # Проверка лимита
+
     can, remaining = check_fanstat_limit(user_id)
     if not can:
         reset_time = get_fanstat_remaining_time(user_id)
-        bot.send_message(
-            chat_id,
-            f"❌ Лимит: 7 запросов в 10 часов.\n"
-            f"⏳ Следующий запрос доступен через {reset_time}."
-        )
+        bot.send_message(chat_id, f"❌ Лимит: 7 запросов в 10 часов.\n⏳ Следующий запрос доступен через {reset_time}.")
         return
-    
+
     user_id_or_username = message.text.strip()
     if not user_id_or_username:
         bot.send_message(chat_id, "❌ Введите Telegram ID или username.")
         return
-    
-    bot.send_message(chat_id, "🔍 Ищу информацию...")
-    
-    try:
-        if user_id_or_username.isdigit():
-            uid = int(user_id_or_username)
-        else:
-            uid = fanstat_find_user(user_id_or_username)
-            if not uid:
-                bot.send_message(chat_id, "❌ Пользователь не найден.")
+
+    status_msg = bot.send_message(chat_id, "🔍 Ищу информацию...")
+
+    def _do_search():
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            
+            clean_query = user_id_or_username.lower().replace('id', '').strip()
+            result = loop.run_until_complete(search_telegram_user_id(clean_query))
+            loop.close()
+
+            if not result.get('success') or not result.get('data', {}).get('stats'):
+                bot.delete_message(chat_id, status_msg.message_id)
+                bot.send_message(chat_id, f"❌ Пользователь не найден.")
                 return
-        
-        stats = fanstat_get_stats(uid)
-        names = fanstat_get_names(uid)
-        usernames = fanstat_get_usernames(uid)
-        groups = fanstat_get_groups(uid)
-        messages = fanstat_get_messages(uid, 5)
-        
-        text = f"✈️ **Telegram ID: {uid}**\n\n"
-        text += f"👤 Имя: {stats.get('first_name', 'Неизвестно')} {stats.get('last_name', '')}\n"
-        text += f"💬 Сообщений: {stats.get('total_msg_count', 0)}\n\n"
-        
-        if usernames:
-            text += "📛 **Юзернеймы:**\n"
-            for u in usernames[:5]:
-                text += f"  @{u.get('name')}\n"
-            text += "\n"
-        
-        if names:
-            text += "📝 **Имена:**\n"
-            for n in names[:5]:
-                text += f"  {n.get('name')}\n"
-            text += "\n"
-        
-        if groups:
-            text += "👥 **Группы (первые 10):**\n"
-            for g in groups[:10]:
-                if isinstance(g, dict) and g.get('title'):
-                    text += f"  • {g.get('title')}\n"
-            text += "\n"
-        
-        if messages:
-            text += "💬 **Последние сообщения:**\n"
-            for m in messages[:5]:
-                msg_text = m.get('text', '')[:100]
-                if msg_text:
-                    text += f"  • {msg_text}\n"
-            text += "\n"
-        
-        text += f"📊 Осталось запросов: {remaining}/7\n"
-        text += SIGNATURE
-        
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_search"))
-        bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
-    except Exception as e:
-        bot.send_message(chat_id, f"❌ Ошибка: {e}")
+
+            stats = result['data'].get('stats', {})
+            if not stats:
+                bot.delete_message(chat_id, status_msg.message_id)
+                bot.send_message(chat_id, f"❌ Пользователь не найден.")
+                return
+
+            bot.delete_message(chat_id, status_msg.message_id)
+
+            formatted = format_telegram_result_html(result['data'], user_id_or_username)
+            text = formatted + SIGNATURE
+
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_search"))
+            bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
+
+            # Списываем запрос ТОЛЬКО если результат найден
+            user = get_user_data(user_id)
+            today = datetime.now().date()
+            if user["last_request_date"]:
+                last_date = datetime.strptime(user["last_request_date"], "%Y-%m-%d").date()
+                if last_date != today:
+                    user["daily_requests"] = 0
+                    user["last_request_date"] = today.strftime("%Y-%m-%d")
+            if user["daily_requests"] < DAILY_LIMIT:
+                user["daily_requests"] += 1
+            else:
+                user["free_requests"] -= 1
+            save_data()
+
+        except Exception as e:
+            bot.delete_message(chat_id, status_msg.message_id)
+            bot.send_message(chat_id, f"❌ Ошибка: {e}")
+
+    threading.Thread(target=_do_search, daemon=True).start()
 
 # ====== ОБРАБОТЧИКИ ======
 def process_email(message):
