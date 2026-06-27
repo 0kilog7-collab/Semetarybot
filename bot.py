@@ -40,6 +40,9 @@ FACE_MAX_FILE_SIZE = 5 * 1024 * 1024
 FACE_DETECT_ENDPOINT = "/bff/detect-faces"
 FACE_SEARCH_ENDPOINT = "/bff/search-faces"
 
+# ====== FACE RESULTS CACHE ======
+face_results_cache = {}  # {chat_id: {"results": [...], "page": 0}}
+
 # ====== СПИСОК ЗАБЛОКИРОВАННЫХ ======
 BLOCKED_USERS = [
     "fast_freezer", "cultfan", "aexby", "otnyal", "faymovy", "Use4tone",
@@ -1186,27 +1189,64 @@ def process_face_search(message):
                 bot.send_message(chat_id, "❌ Лица не найдены или нет совпадений.")
                 return
             
-            text = f"🔍 **Найдено {len(results)} совпадений:**\n\n"
-            for i, person in enumerate(results[:5], 1):
-                name = person.get('name', 'Неизвестно')
-                similarity = person.get('similarity_rate', '0')
-                city = person.get('city', 'Не указан')
-                vk_id = person.get('vk_id', '')
-                image_url = person.get('image_url', '')
-                text += (
-                    f"{i}. **{name}** | {similarity}%\n"
-                    f"   📍 {city}\n"
-                    f"   🔗 [VK](https://vk.com/id{vk_id})\n"
-                    f"   🖼️ [Фото]({image_url})\n\n"
-                )
-            
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_enter"))
-            bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
+            face_results_cache[chat_id] = {"results": results, "page": 0}
+            send_face_page(chat_id, 0)
         except Exception as e:
             bot.send_message(chat_id, f"❌ Ошибка: {e}")
     
     threading.Thread(target=_do_search, daemon=True).start()
+
+def send_face_page(chat_id, page):
+    data = face_results_cache.get(chat_id)
+    if not data:
+        bot.send_message(chat_id, "❌ Результаты не найдены.")
+        return
+    
+    results = data["results"]
+    total = len(results)
+    per_page = 3
+    total_pages = (total + per_page - 1) // per_page
+    if page < 0 or page >= total_pages:
+        return
+    
+    start = page * per_page
+    end = min(start + per_page, total)
+    page_results = results[start:end]
+    
+    text = f"🔍 **Найдено {total} совпадений** (стр. {page+1}/{total_pages}):\n\n"
+    for i, person in enumerate(page_results, start + 1):
+        name = person.get('name', 'Неизвестно')
+        similarity = person.get('similarity_rate', '0')
+        city = person.get('city', 'Не указан')
+        vk_id = person.get('vk_id', '')
+        image_url = person.get('image_url', '')
+        text += (
+            f"{i}. **{name}** | {similarity}%\n"
+            f"   📍 {city}\n"
+            f"   🔗 [VK](https://vk.com/id{vk_id})\n"
+            f"   🖼️ [Фото]({image_url})\n\n"
+        )
+    
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    buttons = []
+    
+    # Невидимая кнопка (всегда есть)
+    buttons.append(types.InlineKeyboardButton("⠀", callback_data="noop"))
+    
+    if page > 0:
+        buttons.append(types.InlineKeyboardButton("⬅️ Назад", callback_data=f"face_page_{page-1}"))
+    else:
+        buttons.append(types.InlineKeyboardButton("⠀", callback_data="noop"))
+    
+    if page < total_pages - 1:
+        buttons.append(types.InlineKeyboardButton("Вперёд ➡️", callback_data=f"face_page_{page+1}"))
+    else:
+        buttons.append(types.InlineKeyboardButton("⠀", callback_data="noop"))
+    
+    markup.add(*buttons)
+    markup.add(types.InlineKeyboardButton("⬅️ Назад в меню", callback_data="menu_enter"))
+    
+    bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True)
 
 # ====== ОБРАБОТЧИКИ ======
 def process_email(message):
@@ -1783,6 +1823,8 @@ def handle_callback(call):
         bot.register_next_step_handler(call.message, process_ai_message)
     elif call.data == "menu_face":
         chat_id = call.message.chat.id
+        if chat_id in face_results_cache:
+            del face_results_cache[chat_id]
         try:
             bot.delete_message(chat_id, call.message.message_id)
         except:
@@ -1818,6 +1860,17 @@ def handle_callback(call):
                 bot.send_message(chat_id, f"❌ Ошибка API: {r.status_code}")
         except Exception as e:
             bot.send_message(chat_id, f"❌ Ошибка при создании логгера: {e}")
+        bot.answer_callback_query(call.id)
+    elif call.data.startswith("face_page_"):
+        page = int(call.data.replace("face_page_", ""))
+        chat_id = call.message.chat.id
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        send_face_page(chat_id, page)
+        bot.answer_callback_query(call.id)
+    elif call.data == "noop":
         bot.answer_callback_query(call.id)
     elif call.data.startswith("generate_photo_"):
         parts = call.data.split("_")
