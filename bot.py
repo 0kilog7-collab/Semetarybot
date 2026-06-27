@@ -41,7 +41,7 @@ FACE_DETECT_ENDPOINT = "/bff/detect-faces"
 FACE_SEARCH_ENDPOINT = "/bff/search-faces"
 
 # ====== FACE RESULTS CACHE ======
-face_results_cache = {}  # {chat_id: {"results": [...], "page": 0}}
+face_results_cache = {}
 
 # ====== СПИСОК ЗАБЛОКИРОВАННЫХ ======
 BLOCKED_USERS = [
@@ -1176,7 +1176,10 @@ def process_face_search(message):
     file_path = file_info.file_path
     image_bytes = bot.download_file(file_path)
     
-    bot.send_message(chat_id, "🔍 Ищу совпадения...")
+    # Сохраняем фото в кеш
+    face_results_cache[chat_id] = {"image_bytes": image_bytes}
+    
+    status_msg = bot.send_message(chat_id, "🔍 Ищу совпадения...")
     
     def _do_search():
         try:
@@ -1185,20 +1188,31 @@ def process_face_search(message):
             results = loop.run_until_complete(main_async(image_bytes))
             loop.close()
             
+            # Удаляем статусное сообщение
+            try:
+                bot.delete_message(chat_id, status_msg.message_id)
+            except:
+                pass
+            
             if not results:
                 bot.send_message(chat_id, "❌ Лица не найдены или нет совпадений.")
                 return
             
-            face_results_cache[chat_id] = {"results": results, "page": 0}
+            face_results_cache[chat_id]["results"] = results
+            face_results_cache[chat_id]["page"] = 0
             send_face_page(chat_id, 0)
         except Exception as e:
+            try:
+                bot.delete_message(chat_id, status_msg.message_id)
+            except:
+                pass
             bot.send_message(chat_id, f"❌ Ошибка: {e}")
     
     threading.Thread(target=_do_search, daemon=True).start()
 
 def send_face_page(chat_id, page):
     data = face_results_cache.get(chat_id)
-    if not data:
+    if not data or "results" not in data:
         bot.send_message(chat_id, "❌ Результаты не найдены.")
         return
     
@@ -1230,23 +1244,19 @@ def send_face_page(chat_id, page):
     markup = types.InlineKeyboardMarkup(row_width=2)
     buttons = []
     
-    # Невидимая кнопка (всегда есть)
-    buttons.append(types.InlineKeyboardButton("⠀", callback_data="noop"))
-    
     if page > 0:
-        buttons.append(types.InlineKeyboardButton("⬅️ Назад", callback_data=f"face_page_{page-1}"))
-    else:
-        buttons.append(types.InlineKeyboardButton("⠀", callback_data="noop"))
+        buttons.append(types.InlineKeyboardButton("Назад", callback_data=f"face_page_{page-1}"))
     
     if page < total_pages - 1:
-        buttons.append(types.InlineKeyboardButton("Вперёд ➡️", callback_data=f"face_page_{page+1}"))
-    else:
-        buttons.append(types.InlineKeyboardButton("⠀", callback_data="noop"))
+        buttons.append(types.InlineKeyboardButton("Вперед", callback_data=f"face_page_{page+1}"))
     
-    markup.add(*buttons)
-    markup.add(types.InlineKeyboardButton("⬅️ Назад в меню", callback_data="menu_enter"))
+    if buttons:
+        markup.add(*buttons)
     
-    bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True)
+    markup.add(types.InlineKeyboardButton("Вернуться в меню", callback_data="face_back_to_menu"))
+    
+    msg = bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True)
+    face_results_cache[chat_id]["last_msg_id"] = msg.message_id
 
 # ====== ОБРАБОТЧИКИ ======
 def process_email(message):
@@ -1824,13 +1834,32 @@ def handle_callback(call):
     elif call.data == "menu_face":
         chat_id = call.message.chat.id
         if chat_id in face_results_cache:
-            del face_results_cache[chat_id]
+            face_results_cache.pop(chat_id)
         try:
             bot.delete_message(chat_id, call.message.message_id)
         except:
             pass
         msg = bot.send_message(chat_id, "📸 Отправьте фото для поиска по лицу.")
         bot.register_next_step_handler(msg, process_face_search)
+    elif call.data == "face_back_to_menu":
+        chat_id = call.message.chat.id
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        if chat_id in face_results_cache:
+            face_results_cache.pop(chat_id)
+        send_banner_with_menu(chat_id)
+        bot.answer_callback_query(call.id)
+    elif call.data.startswith("face_page_"):
+        page = int(call.data.replace("face_page_", ""))
+        chat_id = call.message.chat.id
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        send_face_page(chat_id, page)
+        bot.answer_callback_query(call.id)
     elif call.data == "menu_logger":
         chat_id = call.message.chat.id
         try:
@@ -1860,17 +1889,6 @@ def handle_callback(call):
                 bot.send_message(chat_id, f"❌ Ошибка API: {r.status_code}")
         except Exception as e:
             bot.send_message(chat_id, f"❌ Ошибка при создании логгера: {e}")
-        bot.answer_callback_query(call.id)
-    elif call.data.startswith("face_page_"):
-        page = int(call.data.replace("face_page_", ""))
-        chat_id = call.message.chat.id
-        try:
-            bot.delete_message(chat_id, call.message.message_id)
-        except:
-            pass
-        send_face_page(chat_id, page)
-        bot.answer_callback_query(call.id)
-    elif call.data == "noop":
         bot.answer_callback_query(call.id)
     elif call.data.startswith("generate_photo_"):
         parts = call.data.split("_")
