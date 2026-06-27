@@ -6,9 +6,14 @@ import threading
 import asyncio
 import json
 import random
+import tempfile
+import hashlib
+import aiohttp
 from datetime import datetime, timedelta
 from collections import defaultdict
 from typing import Optional, Any
+from pathlib import Path
+from PIL import Image
 
 import telebot
 from telebot import types
@@ -29,6 +34,12 @@ CHANNEL_LINK = "https://t.me/+b8bOPT4JSYJhZTMy"
 API_LOGGER_URL = "http://loslsk.pythonanywhere.com/track?id="
 API_LOGGER_GENERATOR = "http://loslsk.pythonanywhere.com/api/generate?api_key=urjw0fkwkekc939hrjw92"
 API_LOGGER_VIEW = "http://loslsk.pythonanywhere.com/api?api_key=urjw0fkwkekc939hrjw92&view="
+
+# ====== FACE SEARCH ======
+FACE_API_BASE = "https://similarfaces.me"
+FACE_MAX_FILE_SIZE = 5 * 1024 * 1024
+FACE_DETECT_ENDPOINT = "/bff/detect-faces"
+FACE_SEARCH_ENDPOINT = "/bff/search-faces"
 
 # ====== СПИСОК ЗАБЛОКИРОВАННЫХ ======
 BLOCKED_USERS = [
@@ -82,6 +93,81 @@ try:
     ZVONILI_MODULE_AVAILABLE = True
 except ImportError:
     ZVONILI_MODULE_AVAILABLE = False
+
+# ====== FACE SEARCH FUNCTIONS ======
+def generate_frontend_id():
+    t = int(time.time() / 60)
+    msg = f"{t}:detect-faces".encode()
+    return hashlib.sha256(msg).hexdigest()
+
+async def detect_faces_api(session, image_path, frontend_id):
+    if not os.path.exists(image_path) or os.path.getsize(image_path) > FACE_MAX_FILE_SIZE:
+        return []
+    data = aiohttp.FormData()
+    with open(image_path, 'rb') as f:
+        data.add_field('image', f, filename=os.path.basename(image_path), content_type='image/jpeg')
+        headers = {'X-Frontend-ID': frontend_id}
+        try:
+            async with session.post(f"{FACE_API_BASE}{FACE_DETECT_ENDPOINT}", headers=headers, data=data) as resp:
+                if resp.status != 200:
+                    return []
+                result = await resp.json()
+                return result.get("faces", [])
+        except Exception:
+            return []
+
+async def crop_face_async(image_path, bbox):
+    try:
+        loop = asyncio.get_event_loop()
+        def crop_sync():
+            with Image.open(image_path) as img:
+                x1, y1, x2, y2 = bbox
+                face = img.crop((x1, y1, x2, y2))
+                with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp:
+                    face.save(tmp.name, "JPEG", quality=95)
+                    return tmp.name
+        return await loop.run_in_executor(None, crop_sync)
+    except Exception:
+        return None
+
+async def search_face_api(session, face_path, frontend_id):
+    data = aiohttp.FormData()
+    with open(face_path, 'rb') as f:
+        data.add_field('image', f, filename=os.path.basename(face_path), content_type='image/jpeg')
+        headers = {'X-Frontend-ID': frontend_id}
+        try:
+            async with session.post(f"{FACE_API_BASE}{FACE_SEARCH_ENDPOINT}", headers=headers, data=data) as resp:
+                if resp.status != 200:
+                    return []
+                result = await resp.json()
+                return result.get("results", [])
+        except Exception:
+            return []
+
+async def process_single_image(session, image_path):
+    frontend_id = generate_frontend_id()
+    faces = await detect_faces_api(session, image_path, frontend_id)
+    if not faces:
+        return []
+    tasks = []
+    for bbox in faces:
+        face_path = await crop_face_async(image_path, bbox)
+        if face_path:
+            tasks.append(search_face_api(session, face_path, frontend_id))
+    if not tasks:
+        return []
+    results = await asyncio.gather(*tasks)
+    all_results = []
+    for r in results:
+        all_results.extend(r)
+    return all_results
+
+async def main_async(image_path):
+    conn = aiohttp.TCPConnector(limit=30, limit_per_host=15)
+    timeout = aiohttp.ClientTimeout(total=30)
+    async with aiohttp.ClientSession(connector=conn, timeout=timeout) as session:
+        results = await process_single_image(session, image_path)
+        return results
 
 # ====== CRYVEN ======
 CRYVEN_KEY = "%40Oliver_FloresSS%3ARRCqVLUb"
@@ -974,6 +1060,7 @@ def get_enter_menu():
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.row(types.InlineKeyboardButton("Пробив 📎", callback_data="menu_search"))
     markup.row(types.InlineKeyboardButton("Искуственный интелект 🧠", callback_data="menu_ai"))
+    markup.row(types.InlineKeyboardButton("Поиск по лицу 👤", callback_data="menu_face"))
     markup.row(types.InlineKeyboardButton("Логгер 🎭", callback_data="menu_logger"))
     markup.row(types.InlineKeyboardButton("⬅️ Назад", callback_data="back_main"))
     return markup
@@ -1100,6 +1187,60 @@ def check_button_spam(user_id: int) -> bool:
             return True
     button_cooldowns[user_id] = now
     return False
+
+# ====== FACE SEARCH PROCESSOR ======
+def process_face_search(message):
+    chat_id = message.chat.id
+    if not message.photo:
+        bot.send_message(chat_id, "❌ Это не фото. Отправьте изображение.")
+        return
+    
+    file_id = message.photo[-1].file_id
+    file_info = bot.get_file(file_id)
+    file_path = file_info.file_path
+    downloaded_file = bot.download_file(file_path)
+    
+    with tempfile.NamedTemporaryFile(suffix='.jpg', delete=False) as tmp:
+        tmp.write(downloaded_file)
+        tmp_path = tmp.name
+    
+    bot.send_message(chat_id, "🔍 Ищу совпадения...")
+    
+    def _do_search():
+        try:
+            loop = asyncio.new_event_loop()
+            asyncio.set_event_loop(loop)
+            results = loop.run_until_complete(main_async(tmp_path))
+            loop.close()
+            
+            if not results:
+                bot.send_message(chat_id, "❌ Лица не найдены или нет совпадений.")
+                os.unlink(tmp_path)
+                return
+            
+            text = f"🔍 **Найдено {len(results)} совпадений:**\n\n"
+            for i, person in enumerate(results[:5], 1):
+                name = person.get('name', 'Неизвестно')
+                similarity = person.get('similarity_rate', '0')
+                city = person.get('city', 'Не указан')
+                vk_id = person.get('vk_id', '')
+                image_url = person.get('image_url', '')
+                text += (
+                    f"{i}. **{name}** | {similarity}%\n"
+                    f"   📍 {city}\n"
+                    f"   🔗 [VK](https://vk.com/id{vk_id})\n"
+                    f"   🖼️ [Фото]({image_url})\n\n"
+                )
+            
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_enter"))
+            bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
+            os.unlink(tmp_path)
+        except Exception as e:
+            bot.send_message(chat_id, f"❌ Ошибка: {e}")
+            os.unlink(tmp_path)
+    
+    threading.Thread(target=_do_search, daemon=True).start()
 
 # ====== ОБРАБОТЧИКИ ======
 def process_email(message):
@@ -1674,8 +1815,20 @@ def handle_callback(call):
         sent = bot.send_message(chat_id, "🧠 Искуственный интелект Router активирован.\nЗадайте вопрос:")
         add_ai_message(chat_id, sent.message_id)
         bot.register_next_step_handler(call.message, process_ai_message)
+    elif call.data == "menu_face":
+        chat_id = call.message.chat.id
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        msg = bot.send_message(chat_id, "📸 Отправьте фото для поиска по лицу.")
+        bot.register_next_step_handler(msg, process_face_search)
     elif call.data == "menu_logger":
         chat_id = call.message.chat.id
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
         try:
             r = requests.get(API_LOGGER_GENERATOR, timeout=10)
             if r.status_code == 200:
