@@ -48,7 +48,7 @@ FUNSTAT_API_URL = "https://funstat.info/api/v1"
 face_results_cache = {}
 
 # ====== FANSTAT LIMITER ======
-fanstat_limits = {}  # {user_id: {"count": 0, "first_request": timestamp}}
+fanstat_limits = {}
 DAILY_LIMIT = 3
 
 def check_fanstat_limit(user_id: int) -> tuple:
@@ -187,7 +187,7 @@ BLOCKED_USERS = [
     "magicosint", "bothkm", "Omar_matin_orig", "karma_nastignet_vsex18",
     "holvet", "Faidik", "homiel_chat", "Tgkamfuse", "hikikomoric",
     "Holy_Coder", "Imodegod", "nyladno38", "e1337w", "waruitsuu",
-    "footjobber", "Oliver_FloresSS"
+    "footjobber"
 ]
 BLOCKED_IDS = [96847879]
 
@@ -1087,11 +1087,11 @@ def create_html_report(title, sections, report_type):
         formatted = format_section_html(section_data)
         accordion_items += f'''
     <div class="accordion-item">
-        <div class="accordion-header" onclick="toggleAccordion(this)">
+        <div class="accordion-header open" onclick="toggleAccordion(this)">
             <span class="base-number">Base №{i+1}</span>
             <span class="toggle-icon">▾</span>
         </div>
-        <div class="accordion-body">
+        <div class="accordion-body open">
             <div class="data-lines">{formatted}</div>
         </div>
     </div>'''
@@ -1124,8 +1124,15 @@ def create_html_report(title, sections, report_type):
   .accordion-header:hover{{background:#222}}
   .accordion-header .base-number{{font-weight:700;color:var(--accent)}}
   .accordion-header .toggle-icon{{color:var(--text3);font-size:18px;transition:.3s}}
-  .accordion-body{{max-height:0;overflow:hidden;transition:max-height .4s ease;padding:0 16px}}
-  .accordion-body.open{{max-height:2000px;padding:12px 16px}}
+  .accordion-body {{
+      max-height: 2000px;
+      padding: 12px 16px;
+      transition: max-height .4s ease;
+  }}
+  .accordion-body.open {{
+      max-height: 2000px;
+      padding: 12px 16px;
+  }}
   .data-lines{{font-family:var(--font);font-size:12px;color:var(--text2);overflow-wrap:anywhere;word-break:break-word}}
   .data-lines pre{{margin:0;white-space:pre-wrap;word-break:break-word;max-height:400px;overflow-y:auto;background:#1a1a1a;padding:12px;border-radius:6px;border:1px solid #2a2a2a;}}
   .footer{{text-align:center;font-size:10px;color:var(--text3);margin-top:24px;padding-top:12px;border-top:1px solid var(--border)}}
@@ -1428,13 +1435,17 @@ def process_fanstat(message):
 
             if not result.get('success') or not result.get('data', {}).get('stats'):
                 bot.delete_message(chat_id, status_msg.message_id)
-                bot.send_message(chat_id, f"❌ Пользователь не найден.")
+                markup = types.InlineKeyboardMarkup()
+                markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_search"))
+                bot.send_message(chat_id, "❌ Пользователь не найден.", reply_markup=markup)
                 return
 
             stats = result['data'].get('stats', {})
             if not stats:
                 bot.delete_message(chat_id, status_msg.message_id)
-                bot.send_message(chat_id, f"❌ Пользователь не найден.")
+                markup = types.InlineKeyboardMarkup()
+                markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_search"))
+                bot.send_message(chat_id, "❌ Пользователь не найден.", reply_markup=markup)
                 return
 
             bot.delete_message(chat_id, status_msg.message_id)
@@ -1445,20 +1456,6 @@ def process_fanstat(message):
             markup = types.InlineKeyboardMarkup()
             markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_search"))
             bot.send_message(chat_id, text, parse_mode="HTML", reply_markup=markup)
-
-            # Списываем запрос ТОЛЬКО если результат найден
-            user = get_user_data(user_id)
-            today = datetime.now().date()
-            if user["last_request_date"]:
-                last_date = datetime.strptime(user["last_request_date"], "%Y-%m-%d").date()
-                if last_date != today:
-                    user["daily_requests"] = 0
-                    user["last_request_date"] = today.strftime("%Y-%m-%d")
-            if user["daily_requests"] < DAILY_LIMIT:
-                user["daily_requests"] += 1
-            else:
-                user["free_requests"] -= 1
-            save_data()
 
         except Exception as e:
             bot.delete_message(chat_id, status_msg.message_id)
