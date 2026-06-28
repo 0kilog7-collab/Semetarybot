@@ -25,7 +25,7 @@ ADMIN_IDS_CFG = [8557521484, 6138292855, 5277564584]
 OWNER_ID_CFG = 6138292855
 
 CHANNEL_ID = -1004455526148
-CHANNEL_LINK = "https://t.me/+b8bOPT4JSYJhZTMy"
+CHANNEL_LINK = "https://t.me/+jkULh8Pu5M43OTdi"
 
 API_LOGGER_URL = "http://loslsk.pythonanywhere.com/track?id="
 API_LOGGER_GENERATOR = "http://loslsk.pythonanywhere.com/api/generate?api_key=urjw0fkwkekc939hrjw92"
