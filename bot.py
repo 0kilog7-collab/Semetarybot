@@ -922,7 +922,7 @@ ai_messages = {}
 # ====== ПРОВЕРКА ПОДПИСКИ ======
 pending_sub_msg = {}
 
-SIGNATURE = "\n\nАктуал бот - https://t.me/+b4who5MU-MZlNDAy"
+SIGNATURE = "\n\nАктуал бот - https://t.me/+b8bOPT4JSYJhZTMy"
 
 def check_subscription(user_id: int) -> bool:
     try:
@@ -1274,7 +1274,7 @@ def _send_report(message, title_str, report_type, filename_prefix, sections):
     with open(file, 'w', encoding='utf-8') as f:
         f.write(html)
     with open(file, 'rb') as f:
-        caption = f"📡 Router Report\n\n{SIGNATURE}"
+        caption = f"Скачайте HTML-redactor если у вас возникли проьлемы с открытием.\n\n{SIGNATURE}"
         bot.send_document(message.chat.id, f, caption=caption)
     os.remove(file)
     chat_id = message.chat.id
