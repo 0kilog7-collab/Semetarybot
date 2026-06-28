@@ -20,34 +20,26 @@ import httpx
 import requests
 from bs4 import BeautifulSoup
 
-# ====== КОНФИГ ======
 BOT_TOKEN_CFG = "8895180502:AAFHCyr_O7xp7-H0ZlpNjscM6Y1wxuQn4sw"
 ADMIN_IDS_CFG = [8557521484, 6138292855, 5277564584]
 OWNER_ID_CFG = 6138292855
 
-# ====== КАНАЛ ДЛЯ ПОДПИСКИ ======
 CHANNEL_ID = -1004455526148
 CHANNEL_LINK = "https://t.me/+b8bOPT4JSYJhZTMy"
 
-# ====== ЛОГГЕР ======
 API_LOGGER_URL = "http://loslsk.pythonanywhere.com/track?id="
 API_LOGGER_GENERATOR = "http://loslsk.pythonanywhere.com/api/generate?api_key=urjw0fkwkekc939hrjw92"
 API_LOGGER_VIEW = "http://loslsk.pythonanywhere.com/api?api_key=urjw0fkwkekc939hrjw92&view="
 
-# ====== FACE SEARCH (БЕЗ PIL) ======
 FACE_API_BASE = "https://similarfaces.me"
 FACE_MAX_FILE_SIZE = 5 * 1024 * 1024
 FACE_DETECT_ENDPOINT = "/bff/detect-faces"
 FACE_SEARCH_ENDPOINT = "/bff/search-faces"
 
-# ====== FANSTAT API (из project.py) ======
 FUNSTAT_TOKEN = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiI3NjcyMDkyMDIzIiwianRpIjoiY2I4YWIzMjEtNGUwMi00NmM2LTkyODAtYjAyZGMzNjBlY2U3IiwiZXhwIjoxODEzMzQ4NzM0fQ.ZvbeqetyRiOTi9LM3pfRyr7mC6_lx4t46rVi7GWQQ0xkWmGPmJyxmo8R6DOF1s8Bne0W--LtzgP63R6uKNjFF9mpCmKQilPAwUvGWjjaDkDi9A9FZW2dTEmx2odeULFgQZTsc8FeC5D909IdvZCdiTbesvdFnGLsIi-DDOyj33U"
 FUNSTAT_API_URL = "https://funstat.info/api/v1"
 
-# ====== FACE RESULTS CACHE ======
 face_results_cache = {}
-
-# ====== FANSTAT LIMITER ======
 fanstat_limits = {}
 DAILY_LIMIT = 3
 
@@ -84,7 +76,6 @@ def get_fanstat_remaining_time(user_id: int) -> str:
     minutes = int((remaining % 3600) // 60)
     return f"{hours}ч {minutes}мин"
 
-# ====== FANSTAT FUNCTIONS (из project.py) ======
 async def search_telegram_user_id(user_id: str) -> dict:
     user_id = user_id.lower().replace('id', '').strip()
     if not user_id.isdigit():
@@ -180,14 +171,13 @@ def format_telegram_result_html(data: dict, query: str) -> str:
 
     return "\n".join(result)
 
-# ====== СПИСОК ЗАБЛОКИРОВАННЫХ ======
 BLOCKED_USERS = [
     "fast_freezer", "cultfan", "aexby", "otnyal", "faymovy", "Use4tone",
     "renveil", "avelme", "deepsupp", "id96847879", "plshours", "lnteII",
     "magicosint", "bothkm", "Omar_matin_orig", "karma_nastignet_vsex18",
     "holvet", "Faidik", "homiel_chat", "Tgkamfuse", "hikikomoric",
     "Holy_Coder", "Imodegod", "nyladno38", "e1337w", "waruitsuu",
-    "footjobber"
+    "footjobber", "Oliver_FloresSS"
 ]
 BLOCKED_IDS = [96847879]
 
@@ -202,7 +192,6 @@ for _mod_path in [
         sys.path.insert(0, _mod_path)
 sys.path.insert(0, _base_dir)
 
-# ====== МОДУЛИ ======
 try:
     from social_module import check_messengers
     SOCIAL_MODULE_AVAILABLE = True
@@ -233,7 +222,6 @@ try:
 except ImportError:
     ZVONILI_MODULE_AVAILABLE = False
 
-# ====== FACE SEARCH FUNCTIONS (БЕЗ PIL) ======
 def generate_frontend_id():
     t = int(time.time() / 60)
     msg = f"{t}:detect-faces".encode()
@@ -282,11 +270,9 @@ async def main_async(image_bytes):
         results = await process_single_image(session, image_bytes)
         return results
 
-# ====== CRYVEN ======
 CRYVEN_KEY = "%40Oliver_FloresSS%3ARRCqVLUb"
 CRYVEN_BASE = "https://cryven.info"
 
-# ====== ASYNC LOOP ======
 _loop: asyncio.AbstractEventLoop = asyncio.new_event_loop()
 _loop_thread = threading.Thread(target=_loop.run_forever, daemon=True)
 _loop_thread.start()
@@ -338,7 +324,6 @@ async def _post(url: str, headers: dict = None, json: dict = None, timeout: floa
     except Exception:
         return None
 
-# ====== API КЛЮЧИ ======
 SNUSBASE_KEYS = ["sb5029dec66mht55m78fx8bsw6tm8a", "sbmeovhou6ecsn9fd9wcwnwwvsvwnc"]
 SNUSBASE_URL = "https://api.snusbase.com/data/search"
 OFDATA_KEY = "DiC9ALodH5T12BfR"
@@ -353,7 +338,6 @@ FADE_URL = "https://graph.maybebot.icu/japi/v2/search"
 DEEPSCAN_KEY = "deepscan_5277564584:ckycv9yS"
 DEEPSCAN_URL = "https://deepscan.cc/api/v1/search"
 
-# ====== API ФУНКЦИИ ======
 async def query_local_db(endpoint: str, query: str, api_base: str, api_token: str) -> Optional[str]:
     url = f"{api_base}/{endpoint}?token={api_token}&q={query}"
     for attempt in range(3):
@@ -687,7 +671,6 @@ async def check_vk_murix(user_id: str) -> Optional[str]:
     if r and r.status_code == 200: return r.text[:500]
     return None
 
-# ====== ВСПОМОГАТЕЛЬНЫЕ ФУНКЦИИ ======
 def _clean_cryven(data) -> Optional[str]:
     if not isinstance(data, dict):
         return str(data) if data else None
@@ -730,7 +713,6 @@ def _build_sections(labels, results) -> list:
             counter += 1
     return sections
 
-# ====== ПОИСКОВЫЕ ФУНКЦИИ ======
 async def search_phone(phone: str, cfg: dict) -> list:
     results = await asyncio.gather(
         query_cryven(phone),
@@ -866,7 +848,6 @@ def sync_search_nick(query, cfg):    return run_async(search_nick(query, cfg))
 def sync_search_egrul(inn, cfg):     return run_async(search_egrul(inn, cfg))
 def sync_search_simple(ep, q, cfg):  return run_async(search_simple(ep, q, cfg))
 
-# ====== ОСНОВНЫЕ НАСТРОЙКИ ======
 BOT_TOKEN = BOT_TOKEN_CFG
 ADMIN_IDS = ADMIN_IDS_CFG
 OWNER_ID = OWNER_ID_CFG
@@ -919,7 +900,6 @@ button_cooldowns = {}
 BUTTON_COOLDOWN_SECONDS = 1
 ai_messages = {}
 
-# ====== ПРОВЕРКА ПОДПИСКИ ======
 pending_sub_msg = {}
 
 SIGNATURE = "\n\nАктуал бот - https://t.me/+b8bOPT4JSYJhZTMy"
@@ -980,7 +960,6 @@ def require_subscription(func):
         return func(message_or_call, *args, **kwargs)
     return wrapper
 
-# ====== ОСТАЛЬНЫЕ ФУНКЦИИ БОТА ======
 def is_user_blocked(user_id, username=None):
     if user_id in BLOCKED_IDS:
         return True
@@ -1312,7 +1291,6 @@ def check_button_spam(user_id: int) -> bool:
     button_cooldowns[user_id] = now
     return False
 
-# ====== FACE SEARCH PROCESSOR (БЕЗ PIL) ======
 def process_face_search(message):
     chat_id = message.chat.id
     if not message.photo:
@@ -1406,7 +1384,6 @@ def send_face_page(chat_id, page):
     msg = bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup, disable_web_page_preview=True)
     face_results_cache[chat_id]["last_msg_id"] = msg.message_id
 
-# ====== FANSTAT PROCESSOR (из project.py) ======
 def process_fanstat(message):
     chat_id = message.chat.id
     user_id = message.from_user.id
@@ -1463,7 +1440,6 @@ def process_fanstat(message):
 
     threading.Thread(target=_do_search, daemon=True).start()
 
-# ====== ОБРАБОТЧИКИ ======
 def process_email(message):
     _clear_pending_prompt(message.chat.id)
     query = message.text.strip().lower()
@@ -1811,7 +1787,6 @@ def process_photo_prompt(message, user_id, chat_id):
             add_ai_message(chat_id, sent.message_id)
     _run_in_thread(_do)
 
-# ====== ОБРАБОТЧИК ПРОВЕРКИ ПОДПИСКИ ======
 @bot.callback_query_handler(func=lambda call: call.data == "check_sub")
 def handle_check_subscription(call):
     user_id = call.from_user.id
@@ -1829,7 +1804,6 @@ def handle_check_subscription(call):
     else:
         bot.answer_callback_query(call.id, "❌ Вы ещё не подписались на канал!", show_alert=True)
 
-# ====== ОБРАБОТЧИК КОМАНД С ТОЧКОЙ ДЛЯ ГРУПП ======
 @bot.message_handler(func=lambda message: message.text and message.text.startswith('.'))
 @require_subscription
 def handle_dot_commands(message):
@@ -1855,7 +1829,6 @@ def handle_dot_commands(message):
     
     message.text = original_text
 
-# ====== КОМАНДЫ ======
 @bot.message_handler(commands=['start'])
 @require_subscription
 def send_welcome(message):
@@ -1875,40 +1848,6 @@ def send_welcome(message):
         return
     
     chat_id = message.chat.id
-    
-    try:
-        pinned = bot.get_chat(chat_id).pinned_message
-        if not pinned or pinned.text != "🔒 **НЕ ПОТЕРЯЙТЕ БОТА**":
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("📢 ПОДПИСАТЬСЯ", url=CHANNEL_LINK))
-            
-            pinned_msg = bot.send_message(
-                chat_id,
-                "🔒 **НЕ ПОТЕРЯЙТЕ БОТА**\n\n"
-                "Подпишитесь на канал, чтобы всегда быть в курсе обновлений и не потерять доступ!",
-                parse_mode="Markdown",
-                reply_markup=markup
-            )
-            try:
-                bot.pin_chat_message(chat_id, pinned_msg.message_id)
-            except Exception:
-                pass
-    except Exception:
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("📢 ПОДПИСАТЬСЯ", url=CHANNEL_LINK))
-        
-        pinned_msg = bot.send_message(
-            chat_id,
-            "🔒 **НЕ ПОТЕРЯЙТЕ БОТА**\n\n"
-            "Подпишитесь на канал, чтобы всегда быть в курсе обновлений и не потерять доступ!",
-            parse_mode="Markdown",
-            reply_markup=markup
-        )
-        try:
-            bot.pin_chat_message(chat_id, pinned_msg.message_id)
-        except Exception:
-            pass
-    
     send_banner_with_menu(chat_id)
 
 @bot.message_handler(commands=['ppnl'])
@@ -1993,7 +1932,6 @@ def _slash_ask(message, prompt, handler):
     msg = bot.send_message(message.chat.id, prompt)
     bot.register_next_step_handler(msg, handler)
 
-# ====== КОЛБЭКИ ======
 @bot.callback_query_handler(func=lambda call: True)
 @require_subscription
 def handle_callback(call):
@@ -2239,7 +2177,6 @@ def handle_callback(call):
         bot.register_next_step_handler(msg, process_password)
     bot.answer_callback_query(call.id)
 
-# ====== ЗАПУСК ======
 if __name__ == "__main__":
     print("Router Bot started!")
     bot.infinity_polling(allowed_updates=["message", "callback_query"])
