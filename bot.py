@@ -172,12 +172,7 @@ def format_telegram_result_html(data: dict, query: str) -> str:
     return "\n".join(result)
 
 BLOCKED_USERS = [
-    "fast_freezer", "cultfan", "aexby", "otnyal", "faymovy", "Use4tone",
-    "renveil", "avelme", "deepsupp", "id96847879", "plshours", "lnteII",
-    "magicosint", "bothkm", "Omar_matin_orig", "karma_nastignet_vsex18",
-    "holvet", "Faidik", "homiel_chat", "Tgkamfuse", "hikikomoric",
-    "Holy_Coder", "Imodegod", "nyladno38", "e1337w", "waruitsuu",
-    "footjobber", "Oliver_FloresSS"
+    "fast_freezer", "Omar_matin_orig"
 ]
 BLOCKED_IDS = [96847879]
 
