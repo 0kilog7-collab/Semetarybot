@@ -21,7 +21,9 @@ import httpx
 import requests
 from bs4 import BeautifulSoup
 
-BOT_TOKEN_CFG = "8834572052:AAH0BtFT8rVOf4Jusgh88Y4pAEt9vlZjEsc"
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
+if not BOT_TOKEN:
+    raise ValueError("❌ BOT_TOKEN не найден в переменных окружения!")
 ADMIN_IDS_CFG = [8557521484, 6138292855, 5277564584]
 OWNER_ID_CFG = 6138292855
 
