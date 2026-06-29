@@ -21,11 +21,7 @@ import httpx
 import requests
 from bs4 import BeautifulSoup
 
-# ====== ТОКЕН ИЗ ПЕРЕМЕННОЙ ОКРУЖЕНИЯ ======
-BOT_TOKEN = os.environ.get("BOT_TOKEN")
-if not BOT_TOKEN:
-    raise ValueError("❌ BOT_TOKEN не найден в переменных окружения! Добавь его в Railway Variables.")
-
+BOT_TOKEN_CFG = "8834572052:AAH0BtFT8rVOf4Jusgh88Y4pAEt9vlZjEsc"
 ADMIN_IDS_CFG = [8557521484, 6138292855, 5277564584]
 OWNER_ID_CFG = 6138292855
 
@@ -1014,6 +1010,7 @@ def sync_search_nick(query, cfg):    return run_async(search_nick(query, cfg))
 def sync_search_egrul(inn, cfg):     return run_async(search_egrul(inn, cfg))
 def sync_search_simple(ep, q, cfg):  return run_async(search_simple(ep, q, cfg))
 
+BOT_TOKEN = BOT_TOKEN_CFG
 ADMIN_IDS = ADMIN_IDS_CFG
 OWNER_ID = OWNER_ID_CFG
 
