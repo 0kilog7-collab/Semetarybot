@@ -10,9 +10,6 @@ import tempfile
 import hashlib
 import aiohttp
 import sqlite3
-import smtplib
-from email.mime.text import MIMEText
-from email.mime.multipart import MIMEMultipart
 from datetime import datetime, timedelta
 from collections import defaultdict
 from typing import Optional, Any, List, Dict
@@ -47,6 +44,7 @@ face_results_cache = {}
 fanstat_limits = {}
 DAILY_LIMIT = 3
 
+# ====== TEMP MAIL DB ======
 DB_PATH = os.path.expanduser("~/.tempmail.db")
 
 def init_db():
@@ -211,23 +209,6 @@ async def fetch_message(mail_data: str, msg_id: str) -> Optional[str]:
     return None
 
 init_db()
-
-SMTP_ACCOUNTS = {
-    "alihan911q@gmail.com": "yjdt ccqo bfmm rglu",
-    "almabekovadinara236@gmail.com": "gzlx urjf pxox vvwc",
-    "sanyasolovev1822@gmail.com": "rnuu gekh tprv shyc",
-    "danamirenko422@gmail.com": "baqs bohv zgps lvec",
-    "zaskairataruzhan89@gmail.com": "qozs kurs jmhh crmf",
-    "kontrolr045@gmail.com": "qqes tzxu stsg odyf",
-    "a94337927@gmail.com": "edbs peye kowx xssh",
-    "maksimburev16@gmail.com": "cjnm ruwv oerx gvws",
-    "aanon3463@gmail.com": "kdmu edkp fjme vehk",
-    "poctamnos1@gmail.com": "xczi opvd ealm smgy",
-    "snostgt@gmail.com": "riim hymj ltmx mwwn",
-    "kwerix001@gmail.com": "duoi svzi djrc cjrk",
-    "kwerix002@gmail.com": "oxlq aahp pwqx zaiq",
-    "dlatt6677@gmail.com": "usun ruef otzx zcrh"
-}
 
 def check_fanstat_limit(user_id: int) -> tuple:
     now = time.time()
@@ -1085,91 +1066,6 @@ pending_sub_msg = {}
 
 SIGNATURE = "\n\nАктуал бот - https://t.me/+b8bOPT4JSYJhZTMy"
 
-def process_anonym_recipient(message, sender_email, user_id):
-    chat_id = message.chat.id
-    recipient = message.text.strip()
-    
-    if not recipient or '@' not in recipient:
-        bot.send_message(chat_id, "❌ Неверный email получателя.")
-        return
-    
-    msg = bot.send_message(chat_id, f"📝 Введите тему письма:")
-    bot.register_next_step_handler(msg, lambda m: process_anonym_subject(m, sender_email, recipient, user_id))
-
-def process_anonym_subject(message, sender_email, recipient, user_id):
-    chat_id = message.chat.id
-    subject = message.text.strip()
-    
-    if not subject:
-        subject = "Без темы"
-    
-    msg = bot.send_message(chat_id, f"📝 Введите текст письма:")
-    bot.register_next_step_handler(msg, lambda m: process_anonym_body(m, sender_email, recipient, subject, user_id))
-
-def process_anonym_body(message, sender_email, recipient, subject, user_id):
-    chat_id = message.chat.id
-    body = message.text.strip()
-    
-    if not body:
-        bot.send_message(chat_id, "❌ Текст письма не может быть пустым.")
-        return
-    
-    password = SMTP_ACCOUNTS.get(sender_email)
-    if not password:
-        bot.send_message(chat_id, "❌ Ошибка: почта не найдена.")
-        return
-    
-    wait_msg = bot.send_message(chat_id, "✉️ Отправляю письмо...")
-    
-    def _do():
-        try:
-            msg = MIMEMultipart()
-            msg['From'] = sender_email
-            msg['To'] = recipient
-            msg['Subject'] = subject
-            msg.attach(MIMEText(body, 'plain', 'utf-8'))
-            
-            server = smtplib.SMTP('smtp.gmail.com', 587)
-            server.starttls()
-            server.login(sender_email, password)
-            server.send_message(msg)
-            server.quit()
-            
-            try:
-                bot.delete_message(chat_id, wait_msg.message_id)
-            except:
-                pass
-            
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_anonymmail"))
-            
-            bot.send_message(
-                chat_id,
-                f"✅ Письмо отправлено!\n\n"
-                f"📤 От: `{sender_email}`\n"
-                f"📥 Кому: `{recipient}`\n"
-                f"📌 Тема: `{subject}`",
-                parse_mode="Markdown",
-                reply_markup=markup
-            )
-        except Exception as e:
-            try:
-                bot.delete_message(chat_id, wait_msg.message_id)
-            except:
-                pass
-            
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_anonymmail"))
-            
-            bot.send_message(
-                chat_id,
-                f"❌ Ошибка отправки:\n`{str(e)[:200]}`",
-                parse_mode="Markdown",
-                reply_markup=markup
-            )
-    
-    _run_in_thread(_do)
-
 def check_subscription(user_id: int) -> bool:
     try:
         member = bot.get_chat_member(CHANNEL_ID, user_id)
@@ -1429,8 +1325,7 @@ def get_enter_menu():
     markup.row(types.InlineKeyboardButton("Искуственный интелект 🧠", callback_data="menu_ai"))
     markup.row(types.InlineKeyboardButton("Поиск по лицу 👤", callback_data="menu_face"))
     markup.row(types.InlineKeyboardButton("Логгер 🎭", callback_data="menu_logger"))
-    markup.row(types.InlineKeyboardButton("✉️ Temp Mail", callback_data="menu_tempmail"))
-    markup.row(types.InlineKeyboardButton("📨 Анонимное письмо", callback_data="menu_anonymmail"))
+    markup.row(types.InlineKeyboardButton("Временная почта ✉️", callback_data="menu_tempmail"))
     markup.row(types.InlineKeyboardButton("⬅️ Назад", callback_data="back_main"))
     return markup
 
@@ -2055,6 +1950,7 @@ def process_photo_prompt(message, user_id, chat_id):
             add_ai_message(chat_id, sent.message_id)
     _run_in_thread(_do)
 
+# ====== TEMP MAIL HANDLERS ======
 def process_tm_read(message, mail):
     chat_id = message.chat.id
     msg_id = message.text.strip()
@@ -2086,6 +1982,7 @@ def process_tm_read(message, mail):
             bot.send_message(chat_id, "❌ Не удалось прочитать письмо.", reply_markup=markup)
     _run_in_thread(_do)
 
+# ====== CALLBACK HANDLER ======
 @bot.callback_query_handler(func=lambda call: call.data == "check_sub")
 def handle_check_subscription(call):
     user_id = call.from_user.id
@@ -2719,65 +2616,6 @@ def handle_callback(call):
             pass
         
         bot.send_message(chat_id, "✅ Почта удалена.", reply_markup=markup)
-
-    elif call.data == "menu_anonymmail":
-        chat_id = call.message.chat.id
-        try:
-            bot.delete_message(chat_id, call.message.message_id)
-        except:
-            pass
-        
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        markup.add(types.InlineKeyboardButton("📨 Отправить письмо", callback_data="anonym_send"))
-        markup.add(types.InlineKeyboardButton("📋 Список почт", callback_data="anonym_list"))
-        markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_enter"))
-        
-        m = bot.send_message(chat_id, "📨 Анонимная почта:", reply_markup=markup)
-        last_menu_msg[chat_id] = m.message_id
-
-    elif call.data == "anonym_list":
-        chat_id = call.message.chat.id
-        try:
-            bot.delete_message(chat_id, call.message.message_id)
-        except:
-            pass
-        
-        text = "📋 **Доступные почты для анонимной отправки:**\n\n"
-        for email in SMTP_ACCOUNTS.keys():
-            text += f"• `{email}`\n"
-        
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_anonymmail"))
-        bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
-
-    elif call.data == "anonym_send":
-        chat_id = call.message.chat.id
-        try:
-            bot.delete_message(chat_id, call.message.message_id)
-        except:
-            pass
-        
-        markup = types.InlineKeyboardMarkup(row_width=1)
-        for email in SMTP_ACCOUNTS.keys():
-            markup.add(types.InlineKeyboardButton(email, callback_data=f"anonym_select_{email}"))
-        markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_anonymmail"))
-        
-        m = bot.send_message(chat_id, "Выберите почту для отправки:", reply_markup=markup)
-        last_menu_msg[chat_id] = m.message_id
-
-    elif call.data.startswith("anonym_select_"):
-        email = call.data.replace("anonym_select_", "")
-        chat_id = call.message.chat.id
-        user_id = call.from_user.id
-        
-        try:
-            bot.delete_message(chat_id, call.message.message_id)
-        except:
-            pass
-        
-        msg = bot.send_message(chat_id, f"📝 Введите email получателя:")
-        bot.register_next_step_handler(msg, lambda m: process_anonym_recipient(m, email, user_id))
-        bot.answer_callback_query(call.id)
 
     bot.answer_callback_query(call.id)
 
