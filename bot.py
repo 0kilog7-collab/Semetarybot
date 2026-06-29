@@ -1313,6 +1313,7 @@ function toggleAccordion(el) {{
 def get_main_menu():
     markup = types.InlineKeyboardMarkup(row_width=1)
     markup.row(types.InlineKeyboardButton("🔍 Приступим", callback_data="menu_enter"))
+    markup.row(types.InlineKeyboardButton("🔗 Зеркала ", url="https://routermirrors.onrender.com"))
     markup.row(
         types.InlineKeyboardButton("👤 Профиль", callback_data="menu_profile"),
         types.InlineKeyboardButton("💎 Подписка", callback_data="menu_subscription")
