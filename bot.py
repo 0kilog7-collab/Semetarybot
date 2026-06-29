@@ -9,9 +9,10 @@ import random
 import tempfile
 import hashlib
 import aiohttp
+import sqlite3
 from datetime import datetime, timedelta
 from collections import defaultdict
-from typing import Optional, Any
+from typing import Optional, Any, List, Dict
 from pathlib import Path
 
 import telebot
@@ -42,6 +43,172 @@ FUNSTAT_API_URL = "https://funstat.info/api/v1"
 face_results_cache = {}
 fanstat_limits = {}
 DAILY_LIMIT = 3
+
+# ====== TEMP MAIL DB ======
+DB_PATH = os.path.expanduser("~/.tempmail.db")
+
+def init_db():
+    conn = sqlite3.connect(DB_PATH)
+    cursor = conn.cursor()
+    cursor.execute("CREATE TABLE IF NOT EXISTS mails (id INTEGER PRIMARY KEY AUTOINCREMENT, service TEXT, address TEXT, token TEXT, created_at TEXT)")
+    cursor.execute("CREATE TABLE IF NOT EXISTS users (id INTEGER PRIMARY KEY AUTOINCREMENT, username TEXT, created_at TEXT)")
+    cursor.execute("CREATE TABLE IF NOT EXISTS stats (id INTEGER PRIMARY KEY AUTOINCREMENT, action TEXT, count INTEGER DEFAULT 0)")
+    conn.commit()
+    conn.close()
+
+def get_or_create_user():
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id FROM users ORDER BY id LIMIT 1")
+        row = cursor.fetchone()
+        if not row:
+            cursor.execute("INSERT INTO users (username, created_at) VALUES (?, ?)", 
+                           (os.getlogin() if hasattr(os, 'getlogin') else "user", datetime.now().isoformat()))
+            conn.commit()
+            user_id = cursor.lastrowid
+        else:
+            user_id = row[0]
+        conn.close()
+        return user_id
+    except:
+        return 1
+
+def update_stats(action: str):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO stats (action, count) VALUES (?, 1) ON CONFLICT DO UPDATE SET count = count + 1", (action,))
+        conn.commit()
+        conn.close()
+    except:
+        pass
+
+def get_stats() -> Dict:
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT action, count FROM stats")
+        rows = cursor.fetchall()
+        conn.close()
+        return {r[0]: r[1] for r in rows}
+    except:
+        return {"check": 0, "read": 0, "create": 0, "delete": 0}
+
+def save_mail(service: str, address: str, token: str):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("INSERT INTO mails (service, address, token, created_at) VALUES (?,?,?,?)", 
+                       (service, address, token, datetime.now().isoformat()))
+        conn.commit()
+        conn.close()
+    except:
+        pass
+
+def get_mails() -> List[Dict]:
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("SELECT id, service, address, token FROM mails ORDER BY id DESC")
+        rows = cursor.fetchall()
+        conn.close()
+        return [{"id": r[0], "service": r[1], "address": r[2], "token": r[3]} for r in rows]
+    except:
+        return []
+
+def delete_mail(mail_id: int):
+    try:
+        conn = sqlite3.connect(DB_PATH)
+        cursor = conn.cursor()
+        cursor.execute("DELETE FROM mails WHERE id = ?", (mail_id,))
+        conn.commit()
+        conn.close()
+    except:
+        pass
+
+async def generate_mailtm() -> Optional[str]:
+    try:
+        async with httpx.AsyncClient() as client:
+            domain_res = await client.get("https://api.mail.tm/domains", timeout=5)
+            if domain_res.status_code != 200:
+                return None
+            domain = domain_res.json()["hydra:member"][0]["domain"]
+            username = ''.join(random.choices(string.ascii_lowercase + string.digits, k=10))
+            address = f"{username}@{domain}"
+            password = ''.join(random.choices(string.ascii_letters + string.digits, k=12))
+            
+            await client.post("https://api.mail.tm/accounts", json={"address": address, "password": password}, timeout=5)
+            token_res = await client.post("https://api.mail.tm/token", json={"address": address, "password": password}, timeout=5)
+            if token_res.status_code == 200:
+                token = token_res.json()["token"]
+                return f"mailtm:{address}:{token}"
+    except:
+        pass
+    return None
+
+async def generate_guerrilla() -> Optional[str]:
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.get("https://api.guerrillamail.com/ajax.php?f=get_email_address&lang=ru", timeout=5)
+            if resp.status_code == 200:
+                data = resp.json()
+                address = data.get("email_addr")
+                sid = data.get("sid_token")
+                if address and sid:
+                    return f"guerrilla:{address}:{sid}"
+    except:
+        pass
+    return None
+
+async def check_messages(mail_data: str) -> List[Dict]:
+    try:
+        parts = mail_data.split(":", 2)
+        engine = parts[0]
+        token = parts[2]
+        
+        if engine == "mailtm":
+            headers = {"Authorization": f"Bearer {token}"}
+            async with httpx.AsyncClient() as client:
+                res = await client.get("https://api.mail.tm/messages", headers=headers, timeout=5)
+                if res.status_code == 200:
+                    messages = res.json().get("hydra:member", [])
+                    return [{"id": m["id"], "from": m["from"]["address"], "subject": m["subject"]} for m in messages]
+        
+        elif engine == "guerrilla":
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(f"https://api.guerrillamail.com/ajax.php?f=get_email_list&lang=ru&offset=0&sid_token={token}", timeout=5)
+                if resp.status_code == 200:
+                    data = resp.json()
+                    return [{"id": m["mail_id"], "from": m.get("mail_from", "Неизвестно"), "subject": m.get("mail_subject", "Без темы")} for m in data.get("list", [])]
+    except:
+        pass
+    return []
+
+async def fetch_message(mail_data: str, msg_id: str) -> Optional[str]:
+    try:
+        parts = mail_data.split(":", 2)
+        engine = parts[0]
+        token = parts[2]
+        
+        if engine == "mailtm":
+            headers = {"Authorization": f"Bearer {token}"}
+            async with httpx.AsyncClient() as client:
+                res = await client.get(f"https://api.mail.tm/messages/{msg_id}", headers=headers, timeout=5)
+                if res.status_code == 200:
+                    data = res.json()
+                    return data.get("text", "Пустое письмо")
+        
+        elif engine == "guerrilla":
+            async with httpx.AsyncClient() as client:
+                resp = await client.get(f"https://api.guerrillamail.com/ajax.php?f=fetch_email&lang=ru&email_id={msg_id}&sid_token={token}", timeout=5)
+                if resp.status_code == 200:
+                    return resp.json().get("mail_body", "Пустое письмо")
+    except:
+        pass
+    return None
+
+init_db()
 
 def check_fanstat_limit(user_id: int) -> tuple:
     now = time.time()
@@ -1158,6 +1325,7 @@ def get_enter_menu():
     markup.row(types.InlineKeyboardButton("Искуственный интелект 🧠", callback_data="menu_ai"))
     markup.row(types.InlineKeyboardButton("Поиск по лицу 👤", callback_data="menu_face"))
     markup.row(types.InlineKeyboardButton("Логгер 🎭", callback_data="menu_logger"))
+    markup.row(types.InlineKeyboardButton("Временная почта ✉️", callback_data="menu_tempmail"))
     markup.row(types.InlineKeyboardButton("⬅️ Назад", callback_data="back_main"))
     return markup
 
@@ -1782,6 +1950,39 @@ def process_photo_prompt(message, user_id, chat_id):
             add_ai_message(chat_id, sent.message_id)
     _run_in_thread(_do)
 
+# ====== TEMP MAIL HANDLERS ======
+def process_tm_read(message, mail):
+    chat_id = message.chat.id
+    msg_id = message.text.strip()
+    
+    if not msg_id:
+        bot.send_message(chat_id, "❌ Неверный ID.")
+        return
+    
+    mail_data = f"{mail['service']}:{mail['address']}:{mail['token']}"
+    msg = bot.send_message(chat_id, "Загружаю письмо...")
+    
+    def _do():
+        content = asyncio.run(fetch_message(mail_data, msg_id))
+        update_stats("read")
+        try:
+            bot.delete_message(chat_id, msg.message_id)
+        except:
+            pass
+        
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_tempmail"))
+        
+        if content:
+            text = f"📄 Письмо:\n\n{content[:3500]}"
+            if len(content) > 3500:
+                text += "\n\n... (обрезано)"
+            bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
+        else:
+            bot.send_message(chat_id, "❌ Не удалось прочитать письмо.", reply_markup=markup)
+    _run_in_thread(_do)
+
+# ====== CALLBACK HANDLER ======
 @bot.callback_query_handler(func=lambda call: call.data == "check_sub")
 def handle_check_subscription(call):
     user_id = call.from_user.id
@@ -2170,6 +2371,252 @@ def handle_callback(call):
         msg = bot.send_message(call.message.chat.id, "Введите пароль для поиска:")
         pending_prompt_msg[call.message.chat.id] = msg.message_id
         bot.register_next_step_handler(msg, process_password)
+    elif call.data == "menu_tempmail":
+        chat_id = call.message.chat.id
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(
+            types.InlineKeyboardButton("📧 Создать почту", callback_data="tm_create"),
+            types.InlineKeyboardButton("📩 Проверить ящик", callback_data="tm_check"),
+            types.InlineKeyboardButton("📖 Прочитать письмо", callback_data="tm_read"),
+            types.InlineKeyboardButton("🗑️ Удалить почту", callback_data="tm_delete")
+        )
+        markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_enter"))
+        
+        m = bot.send_message(chat_id, "✉️ Временная почта:", reply_markup=markup)
+        last_menu_msg[chat_id] = m.message_id
+
+    elif call.data == "tm_create":
+        chat_id = call.message.chat.id
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        markup.add(
+            types.InlineKeyboardButton("Mail.tm", callback_data="tm_mailtm"),
+            types.InlineKeyboardButton("Guerrilla Mail", callback_data="tm_guerrilla"),
+            types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_tempmail")
+        )
+        
+        m = bot.send_message(chat_id, "Выберите сервис:", reply_markup=markup)
+        last_menu_msg[chat_id] = m.message_id
+
+    elif call.data == "tm_mailtm":
+        chat_id = call.message.chat.id
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        
+        msg = bot.send_message(chat_id, "Создаю почту Mail.tm...")
+        
+        def _do():
+            result = asyncio.run(generate_mailtm())
+            try:
+                bot.delete_message(chat_id, msg.message_id)
+            except:
+                pass
+            if result:
+                parts = result.split(":")
+                save_mail(parts[0], parts[1], parts[2])
+                update_stats("create")
+                markup = types.InlineKeyboardMarkup()
+                markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_tempmail"))
+                bot.send_message(
+                    chat_id,
+                    f"✅ Почта создана:\n`{parts[1]}`\n\n"
+                    f"📌 Используйте `Проверить ящик` для просмотра писем.",
+                    parse_mode="Markdown",
+                    reply_markup=markup
+                )
+            else:
+                bot.send_message(chat_id, "❌ Ошибка создания. Попробуйте позже.")
+        _run_in_thread(_do)
+
+    elif call.data == "tm_guerrilla":
+        chat_id = call.message.chat.id
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        
+        msg = bot.send_message(chat_id, "Создаю почту Guerrilla...")
+        
+        def _do():
+            result = asyncio.run(generate_guerrilla())
+            try:
+                bot.delete_message(chat_id, msg.message_id)
+            except:
+                pass
+            if result:
+                parts = result.split(":")
+                save_mail(parts[0], parts[1], parts[2])
+                update_stats("create")
+                markup = types.InlineKeyboardMarkup()
+                markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_tempmail"))
+                bot.send_message(
+                    chat_id,
+                    f"✅ Почта создана:\n`{parts[1]}`\n\n"
+                    f"📌 Используйте `Проверить ящик` для просмотра писем.",
+                    parse_mode="Markdown",
+                    reply_markup=markup
+                )
+            else:
+                bot.send_message(chat_id, "❌ Ошибка создания. Попробуйте позже.")
+        _run_in_thread(_do)
+
+    elif call.data == "tm_check":
+        chat_id = call.message.chat.id
+        mails = get_mails()
+        
+        if not mails:
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_tempmail"))
+            bot.send_message(chat_id, "📭 Нет сохранённых почт. Сначала создайте!", reply_markup=markup)
+            return
+        
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        for mail in mails:
+            label = mail['address'][:25] + "..." if len(mail['address']) > 25 else mail['address']
+            markup.add(types.InlineKeyboardButton(label, callback_data=f"tm_check_{mail['id']}"))
+        markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_tempmail"))
+        
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        m = bot.send_message(chat_id, "Выберите почту для проверки:", reply_markup=markup)
+        last_menu_msg[chat_id] = m.message_id
+
+    elif call.data.startswith("tm_check_"):
+        mail_id = int(call.data.split("_")[2])
+        chat_id = call.message.chat.id
+        mails = get_mails()
+        mail = next((m for m in mails if m["id"] == mail_id), None)
+        
+        if not mail:
+            bot.send_message(chat_id, "❌ Почта не найдена.")
+            return
+        
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        
+        msg = bot.send_message(chat_id, f"Проверяю {mail['address']}...")
+        mail_data = f"{mail['service']}:{mail['address']}:{mail['token']}"
+        
+        def _do():
+            messages = asyncio.run(check_messages(mail_data))
+            update_stats("check")
+            try:
+                bot.delete_message(chat_id, msg.message_id)
+            except:
+                pass
+            
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_tempmail"))
+            
+            if not messages:
+                bot.send_message(chat_id, f"📭 Нет писем для {mail['address']}.", reply_markup=markup)
+                return
+            
+            text = f"📨 Входящие для {mail['address']}:\n\n"
+            for i, msg_data in enumerate(messages[:10], 1):
+                text += f"{i}. От: {msg_data['from']}\n   Тема: {msg_data['subject']}\n   ID: `{msg_data['id']}`\n\n"
+            
+            if len(messages) > 10:
+                text += f"... и ещё {len(messages)-10} писем."
+            
+            bot.send_message(chat_id, text, parse_mode="Markdown", reply_markup=markup)
+        _run_in_thread(_do)
+
+    elif call.data == "tm_read":
+        chat_id = call.message.chat.id
+        mails = get_mails()
+        
+        if not mails:
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_tempmail"))
+            bot.send_message(chat_id, "📭 Нет сохранённых почт. Сначала создайте!", reply_markup=markup)
+            return
+        
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        for mail in mails:
+            label = mail['address'][:25] + "..." if len(mail['address']) > 25 else mail['address']
+            markup.add(types.InlineKeyboardButton(label, callback_data=f"tm_read_select_{mail['id']}"))
+        markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_tempmail"))
+        
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        m = bot.send_message(chat_id, "Выберите почту, затем введите ID письма:", reply_markup=markup)
+        last_menu_msg[chat_id] = m.message_id
+
+    elif call.data.startswith("tm_read_select_"):
+        mail_id = int(call.data.split("_")[3])
+        chat_id = call.message.chat.id
+        mails = get_mails()
+        mail = next((m for m in mails if m["id"] == mail_id), None)
+        
+        if not mail:
+            bot.send_message(chat_id, "❌ Почта не найдена.")
+            return
+        
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        
+        msg = bot.send_message(chat_id, f"Введите ID письма для {mail['address']}:\n(из списка при проверке)")
+        bot.register_next_step_handler(msg, lambda m: process_tm_read(m, mail))
+
+    elif call.data == "tm_delete":
+        chat_id = call.message.chat.id
+        mails = get_mails()
+        
+        if not mails:
+            markup = types.InlineKeyboardMarkup()
+            markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_tempmail"))
+            bot.send_message(chat_id, "📭 Нет почт для удаления.", reply_markup=markup)
+            return
+        
+        markup = types.InlineKeyboardMarkup(row_width=1)
+        for mail in mails:
+            label = mail['address'][:25] + "..." if len(mail['address']) > 25 else mail['address']
+            markup.add(types.InlineKeyboardButton(f"🗑️ {label}", callback_data=f"tm_delete_do_{mail['id']}"))
+        markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_tempmail"))
+        
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        m = bot.send_message(chat_id, "Выберите почту для удаления:", reply_markup=markup)
+        last_menu_msg[chat_id] = m.message_id
+
+    elif call.data.startswith("tm_delete_do_"):
+        mail_id = int(call.data.split("_")[3])
+        chat_id = call.message.chat.id
+        delete_mail(mail_id)
+        update_stats("delete")
+        
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("⬅️ Назад", callback_data="menu_tempmail"))
+        
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        
+        bot.send_message(chat_id, "✅ Почта удалена.", reply_markup=markup)
+
     bot.answer_callback_query(call.id)
 
 if __name__ == "__main__":
