@@ -21,7 +21,7 @@ import httpx
 import requests
 from bs4 import BeautifulSoup
 
-BOT_TOKEN_CFG = "8834572052:AAH0BtFT8rVOf4Jusgh88Y4pAEt9vlZjEsc"
+BOT_TOKEN_CFG = "8530922925:AAHns9naUuQEW10l1giWUGUYiCmkiA6yvYg"
 ADMIN_IDS_CFG = [8557521484, 6138292855, 5277564584]
 OWNER_ID_CFG = 6138292855
 
@@ -1029,8 +1029,8 @@ SHODAN_KEY = "i7SlTEgdEoz3aNPKn6tH7aHFKwqmPrPF"
 ABUSEIPDB_KEY = "70bcb231c3ae0194917804f23f6f96843bffec2bf2304f09f24b327c3f340d2d769689af42c8790d"
 API_BASE = "http://94.26.90.84:8000"
 API_TOKEN = "5KDOIVqn9uvDD17LsThnnwZjMAZsAUEiFtDPhcyc"
-DEPSEARCH_TOKEN = "WDTHx2vqZGE38gchBe7oAewzB9ZPNpxU"
-DEPSEARCH_BACKUP_TOKEN = "XV1rGjJyryowCyGMKqfJ72ozJtF0bhoF"
+DEPSEARCH_TOKEN = "w8wxpMncT84SyYSDobV6zSFdZGqcnAoJ"
+DEPSEARCH_BACKUP_TOKEN = "w8wxpMncT84SyYSDobV6zSFdZGqcnAoJ"  
 HUNTER_API_KEY = "c750a854258bf1a9c264f6166ca7e34f0a3c783d"
 
 CFG = {
@@ -1985,6 +1985,69 @@ def process_tm_read(message, mail):
             bot.send_message(chat_id, "❌ Не удалось прочитать письмо.", reply_markup=markup)
     _run_in_thread(_do)
 
+# ====== РАССЫЛКА ======
+def process_mailing(message):
+    chat_id = message.chat.id
+    admin_id = message.from_user.id
+    
+    if not is_admin(admin_id):
+        bot.send_message(chat_id, "❌ Нет доступа.")
+        return
+    
+    text = message.text.strip()
+    if not text:
+        bot.send_message(chat_id, "❌ Текст не может быть пустым.")
+        return
+    
+    # Собираем пользователей
+    user_ids = set()
+    try:
+        for uid in user_requests.keys():
+            user_ids.add(uid)
+        for uid in banned_users:
+            user_ids.discard(uid)
+        for uid in ai_sessions:
+            user_ids.add(uid)
+        for uid in last_menu_msg.keys():
+            user_ids.add(uid)
+        for uid in pending_prompt_msg.keys():
+            user_ids.add(uid)
+    except Exception as e:
+        bot.send_message(chat_id, f"❌ Ошибка при сборе пользователей: {e}")
+        return
+    
+    if not user_ids:
+        bot.send_message(chat_id, "❌ Нет пользователей для рассылки.")
+        return
+    
+    confirm_msg = bot.send_message(
+        chat_id,
+        f"📨 Начинаю рассылку для {len(user_ids)} пользователей.\n"
+        f"Текст:\n{text[:200]}{'...' if len(text) > 200 else ''}\n\n"
+        f"⏳ Это может занять некоторое время..."
+    )
+    
+    def _do_mailing():
+        success = 0
+        fail = 0
+        for uid in user_ids:
+            try:
+                bot.send_message(uid, text, parse_mode="HTML")
+                success += 1
+                time.sleep(0.05)
+            except Exception:
+                fail += 1
+        bot.edit_message_text(
+            f"✅ Рассылка завершена!\n"
+            f"📤 Отправлено: {success}\n"
+            f"❌ Не доставлено: {fail}\n"
+            f"👥 Всего: {len(user_ids)}",
+            chat_id,
+            confirm_msg.message_id
+        )
+    
+    threading.Thread(target=_do_mailing, daemon=True).start()
+
 # ====== CALLBACK HANDLER ======
 @bot.callback_query_handler(func=lambda call: call.data == "check_sub")
 def handle_check_subscription(call):
@@ -2060,6 +2123,7 @@ def show_admin_panel(message):
         markup.row(types.InlineKeyboardButton("Разбанить", callback_data="admin_unban_user"))
         markup.row(types.InlineKeyboardButton("Список забаненных", callback_data="admin_banned_list"))
         markup.row(types.InlineKeyboardButton("Статистика", callback_data="admin_stats"))
+        markup.row(types.InlineKeyboardButton("📨 Рассылка", callback_data="admin_mailing"))
         markup.row(types.InlineKeyboardButton("Закрыть", callback_data="back_main"))
         bot.send_message(message.chat.id, "Админ панель", reply_markup=markup)
     else:
@@ -2259,6 +2323,11 @@ def handle_callback(call):
                 bot.send_message(chat_id, f"❌ Ошибка API: {r.status_code}")
         except Exception as e:
             bot.send_message(chat_id, f"❌ Ошибка при создании логгера: {e}")
+        bot.answer_callback_query(call.id)
+    elif call.data == "admin_mailing" and is_admin(user_id):
+        chat_id = call.message.chat.id
+        msg = bot.send_message(chat_id, "📨 Введите текст для рассылки (можно с HTML-разметкой):")
+        bot.register_next_step_handler(msg, process_mailing)
         bot.answer_callback_query(call.id)
     elif call.data == "search_fanstat":
         chat_id = call.message.chat.id
@@ -2625,4 +2694,5 @@ def handle_callback(call):
 if __name__ == "__main__":
     print("Router Bot started!")
     bot.infinity_polling(allowed_updates=["message", "callback_query"])
+
 
