@@ -1577,7 +1577,7 @@ def send_banner_with_menu(chat_id, status=None, clear_ai=False):
             show_above_text=True
         )
         
-        caption = "<blockquote>Выберите действие:</blockquote>"
+        caption = "<blockquote>Оковы сняты, выбирайте:</blockquote>"
         
         m = bot.send_message(
             chat_id,
@@ -1588,7 +1588,7 @@ def send_banner_with_menu(chat_id, status=None, clear_ai=False):
         )
         last_menu_msg[chat_id] = m.message_id
     except Exception:
-        caption = "Выберите действие:"
+        caption = "Оковы сняты, выбирайте:"
         if status:
             caption = f"{status}\n\n{caption}"
         
