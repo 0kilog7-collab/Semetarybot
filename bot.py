@@ -22,12 +22,12 @@ import httpx
 import requests
 from bs4 import BeautifulSoup
 
-BOT_TOKEN_CFG = "8530922925:AAHns9naUuQEW10l1giWUGUYiCmkiA6yvYg"
-ADMIN_IDS_CFG = [8557521484, 6138292855, 5277564584]
-OWNER_ID_CFG = 6138292855
+BOT_TOKEN_CFG = "8872879419:AAF-Iq-_LR8ug5madsF6243xZdjLob0PvZs"
+ADMIN_IDS_CFG = [5277564584]
+OWNER_ID_CFG = 5277564584
 
-CHANNEL_ID = -1004455526148
-CHANNEL_LINK = "https://t.me/+jkULh8Pu5M43OTdi"
+CHANNEL_ID = -1004447049309
+CHANNEL_LINK = "https://t.me/+7DX76Z1638lmNmIy"
 
 API_LOGGER_URL = "http://loslsk.pythonanywhere.com/track?id="
 API_LOGGER_GENERATOR = "http://loslsk.pythonanywhere.com/api/generate?api_key=urjw0fkwkekc939hrjw92"
@@ -41,11 +41,25 @@ FACE_SEARCH_ENDPOINT = "/bff/search-faces"
 FUNSTAT_TOKEN = "eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1aWQiOiI3NjcyMDkyMDIzIiwianRpIjoiY2I4YWIzMjEtNGUwMi00NmM2LWkyODAtYjAyZGMzNjBlY2U3IiwiZXhwIjoxODEzMzQ4NzM0fQ.ZvbeqetyRiOTi9LM3pfRyr7mC6_lx4t46rVi7GWQQ0xkWmGPmJyxmo8R6DOF1s8Bne0W--LtzgP63R6uKNjFF9mpCmKQilPAwUvGWjjaDkDi9A9FZW2dTEmx2odeULFgQZTsc8FeC5D909IdvZCdiTbesvdFnGLsIi-DDOyj33U"
 FUNSTAT_API_URL = "https://funstat.info/api/v1"
 
-# ====== BIGBASE ======
 BIGBASE_TOKEN = "hEtcNRmBOGUxGwHX9NfOccaIXbyqCmRF"
 BIGBASE_URL = "https://bigbase.top/api"
 
-# ====== TELEGRAM OSINT API ======
+QUICKFLOW_TOKEN = "063b6819d85570dfe1b5f5b4ba5be14ac1d66a74e848ee9d1588068a9cf9b372"
+QUICKFLOW_URL = "https://api.quickflow.lat"
+
+GOOGLE_API_KEY = "AIzaSyDxQoDCbzrU22SwyLMln3Qj2__PMUFTC9o"
+GOOGLE_CX = "84a64448a902c4626"
+
+TONCENTER_URL = "https://toncenter.com/api/v3"
+
+DEPSEARCH_TOKEN = "w8wxpMncT84SyYSDobV6zSFdZGqcnAoJ"
+DEPSEARCH_BACKUP_TOKEN = "w8wxpMncT84SyYSDobV6zSFdZGqcnAoJ"
+
+BLACKEYE_TOKEN = "R5dxhMW1AyqJkjAPyWVkjA"
+BLACKEYE_URL = "https://blackeyebot.duckdns.org/api/v1"
+
+REASON_API_KEY = "jupit-6369a9ee7ac97336c92a4297b2"
+
 TG_OSINT_TOKEN = "76:fBn742F2bJNyb6wW6jatmrZ3NVkogjjO"
 TG_OSINT_BASE_URL = "https://kartoshka.free/v1"
 TG_OSINT_HEADERS = {"Authorization": f"Bearer {TG_OSINT_TOKEN}"}
@@ -83,7 +97,7 @@ def tg_osint_get_transfer_history(query):
     owner = found.get("owner", {})
     ref = owner.get("username") or owner.get("telegramId") or owner.get("seeId")
     
-    info_text = f"= ИНФОРМАЦИЯ О ПОЛЬЗОВАТЕЛЕ =\n"
+    info_text = f"ИНФОРМАЦИЯ О ПОЛЬЗОВАТЕЛЕ\n"
     info_text += f"Username: {owner.get('username', 'Нет')}\n"
     info_text += f"Telegram ID: {owner.get('telegramId', 'Нет')}\n"
     info_text += f"Имя: {owner.get('name', 'Нет')}\n\n"
@@ -111,7 +125,7 @@ def tg_osint_get_transfer_history(query):
     if not transfers:
         return info_text + "История переводов пуста"
 
-    result_text = info_text + f"= ИСТОРИЯ ПЕРЕВОДОВ ({len(transfers)}) =\n\n"
+    result_text = info_text + f"ИСТОРИЯ ПЕРЕВОДОВ ({len(transfers)})\n\n"
     
     for idx, item in enumerate(transfers[:10], 1):
         ga = item.get("giftAction", {})
@@ -142,7 +156,7 @@ def tg_osint_get_name_history(query):
     owner = found.get("owner", {})
     ref = owner.get("username") or owner.get("telegramId") or owner.get("seeId")
     
-    info_text = f"= ИНФОРМАЦИЯ О ПОЛЬЗОВАТЕЛЕ =\n"
+    info_text = f"ИНФОРМАЦИЯ О ПОЛЬЗОВАТЕЛЕ\n"
     info_text += f"Username: {owner.get('username', 'Нет')}\n"
     info_text += f"Telegram ID: {owner.get('telegramId', 'Нет')}\n"
     info_text += f"Имя: {owner.get('name', 'Нет')}\n\n"
@@ -169,7 +183,7 @@ def tg_osint_get_name_history(query):
     if not name_events:
         return info_text + "Нет истории смены имен/юзернеймов"
 
-    result_text = info_text + f"= ИСТОРИЯ ИМЕН ({len(name_events)}) =\n\n"
+    result_text = info_text + f"ИСТОРИЯ ИМЕН ({len(name_events)})\n\n"
     
     last_str = None
     for idx, item in enumerate(name_events, 1):
@@ -212,6 +226,203 @@ def bigbase_search(query):
         return data
     except Exception:
         return None
+
+def quickflow_search(query: str) -> Optional[Dict]:
+    try:
+        url = f"{QUICKFLOW_URL}/get-user"
+        params = {"token": QUICKFLOW_TOKEN, "username": query}
+        r = requests.get(url, params=params, timeout=10)
+        if r.status_code == 200:
+            return r.json()
+        return None
+    except Exception:
+        return None
+
+def google_search(query: str, start: int = 1) -> Optional[Dict]:
+    try:
+        url = "https://www.googleapis.com/customsearch/v1"
+        params = {"key": GOOGLE_API_KEY, "cx": GOOGLE_CX, "q": query, "num": 5, "start": start}
+        r = requests.get(url, params=params, timeout=10)
+        if r.status_code == 200:
+            return r.json()
+        return None
+    except Exception:
+        return None
+
+# ====== TON TRANSACTIONS ONLY ======
+def ton_get_transactions(address: str, limit: int = 5, offset: int = 0) -> Optional[Dict]:
+    try:
+        url = f"{TONCENTER_URL}/transactions"
+        params = {"account": address, "limit": limit, "sort": "desc", "offset": offset}
+        r = requests.get(url, params=params, timeout=10)
+        if r.status_code == 200:
+            return r.json()
+        return None
+    except Exception:
+        return None
+
+user_ton_data = {}
+
+def send_ton_page(chat_id, page):
+    data = user_ton_data.get(chat_id)
+    if not data:
+        return
+    address = data["address"]
+    limit = 5
+    offset = page * limit
+    
+    result = ton_get_transactions(address, limit, offset)
+    if not result or "transactions" not in result:
+        bot.send_message(chat_id, "Транзакции не найдены.")
+        return
+    
+    txs = result["transactions"]
+    total = len(txs)
+    user_ton_data[chat_id]["transactions"] = txs
+    user_ton_data[chat_id]["page"] = page
+    user_ton_data[chat_id]["total"] = total
+    
+    text = f"TON ТРАНЗАКЦИИ\nАдрес: {address}\n\n"
+    if total == 0:
+        text += "Нет транзакций."
+    else:
+        for idx, tx in enumerate(txs, start=offset + 1):
+            value = tx.get("in_msg", {}).get("value", "0")
+            text += f"{idx}. {tx.get('now', 'Нет даты')} | {value} TON\n"
+    
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(types.InlineKeyboardButton(" Назад", callback_data=f"ton_page_{page-1}"))
+    if total == limit:
+        nav_buttons.append(types.InlineKeyboardButton("Вперёд ", callback_data=f"ton_page_{page+1}"))
+    if nav_buttons:
+        markup.row(*nav_buttons)
+    
+    markup.row(types.InlineKeyboardButton(" Вернуться в меню", callback_data="menu_search"))
+    
+    bot.send_message(chat_id, text, reply_markup=markup)
+
+# ====== GOOGLE PAGINATION ======
+user_google_data = {}
+
+def send_google_page(chat_id, page):
+    data = user_google_data.get(chat_id)
+    if not data:
+        return
+    query = data["query"]
+    start_index = page * 5 + 1
+    result = google_search(query, start=start_index)
+    if not result or "items" not in result:
+        bot.send_message(chat_id, "Ничего не найдено.")
+        return
+    items = result["items"]
+    total = len(items)
+    user_google_data[chat_id]["results"] = items
+    user_google_data[chat_id]["page"] = page
+    user_google_data[chat_id]["total"] = total
+    
+    text = f"Google: {query}\n\n"
+    for idx, item in enumerate(items, start=start_index):
+        title = item.get("title", "Нет заголовка")
+        link = item.get("link", "Нет ссылки")
+        snippet = item.get("snippet", "Нет описания")[:200]
+        text += f"{idx}. {title}\n   {link}\n   {snippet}\n\n"
+    
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(types.InlineKeyboardButton("Назад", callback_data=f"google_page_{page-1}"))
+    if total == 5:
+        nav_buttons.append(types.InlineKeyboardButton("Вперёд ", callback_data=f"google_page_{page+1}"))
+    if nav_buttons:
+        markup.row(*nav_buttons)
+    
+    markup.row(types.InlineKeyboardButton(" Вернуться в меню", callback_data="menu_search"))
+    
+    bot.send_message(chat_id, text[:4000], reply_markup=markup)
+
+# ====== BLACKEYE ======
+def blackeye_request(endpoint: str, params: dict = None) -> Optional[Dict]:
+    try:
+        url = f"{BLACKEYE_URL}{endpoint}"
+        headers = {"Authorization": f"Bearer {BLACKEYE_TOKEN}"}
+        r = requests.get(url, headers=headers, params=params, timeout=10)
+        if r.status_code == 200:
+            return r.json()
+        return None
+    except Exception:
+        return None
+
+def blackeye_gift_user(username: str) -> Optional[Dict]:
+    return blackeye_request("/gift/user", {"username": username})
+
+def blackeye_gift_search(query: str, limit: int = 20) -> Optional[Dict]:
+    return blackeye_request("/gift/search", {"query": query, "limit": limit})
+
+def blackeye_gift_stats() -> Optional[Dict]:
+    return blackeye_request("/gift/stats")
+
+def blackeye_gift_links(user_id: str, mode: str = "all", limit: int = 20) -> Optional[Dict]:
+    return blackeye_request("/gift/links", {"user_id": user_id, "mode": mode, "limit": limit})
+
+def blackeye_whois(domain: str) -> Optional[Dict]:
+    return blackeye_request("/whois", {"domain": domain})
+
+# ====== GITHUB ======
+def github_user_info(username: str) -> Optional[Dict]:
+    try:
+        url = f"https://api.github.com/users/{username}"
+        r = requests.get(url, timeout=10)
+        if r.status_code == 200:
+            return r.json()
+        return None
+    except Exception:
+        return None
+
+def github_search_users(query: str) -> Optional[Dict]:
+    try:
+        url = "https://api.github.com/search/users"
+        params = {"q": query, "per_page": 5}
+        r = requests.get(url, params=params, timeout=10)
+        if r.status_code == 200:
+            return r.json()
+        return None
+    except Exception:
+        return None
+
+# ====== ПРОКСИ ======
+def generate_proxies() -> List[str]:
+    proxies = []
+    sources = [
+        "https://freeproxydb.com/api/proxy/search?protocol=socks5&page_size=20",
+        "https://freeproxydb.com/api/proxy/search?protocol=http&page_size=20",
+        "https://api.proxyscrape.com/v2/?request=displayproxies&protocol=http&timeout=10000&country=all&ssl=all&anonymity=all"
+    ]
+    for url in sources:
+        try:
+            r = requests.get(url, timeout=10)
+            if r.status_code == 200:
+                if "freeproxydb" in url:
+                    data = r.json()
+                    for item in data.get("results", []):
+                        ip = item.get("ip")
+                        port = item.get("port")
+                        if ip and port:
+                            proxies.append(f"{ip}:{port}")
+                else:
+                    for line in r.text.strip().split("\n"):
+                        if ":" in line:
+                            proxies.append(line.strip())
+        except:
+            continue
+    proxies = list(set(proxies))
+    with open("proxies.txt", "w") as f:
+        for proxy in proxies:
+            f.write(proxy + "\n")
+    return proxies
 
 DB_PATH = os.path.expanduser("~/.tempmail.db")
 
@@ -656,7 +867,7 @@ async def _post(url: str, headers: dict = None, json: dict = None, timeout: floa
 
 SNUSBASE_KEYS = ["sb5029dec66mht55m78fx8bsw6tm8a", "sbmeovhou6ecsn9fd9wcwnwwvsvwnc"]
 SNUSBASE_URL = "https://api.snusbase.com/data/search"
-OFDATA_KEY = "DiC9ALodH5T12BfR"
+OFDATA_KEY = "KBnpz1CHKNngFXxK"
 OFDATA_BASE = "https://api.ofdata.ru/v2"
 INFINITY_KEY = "N7xQ4Lp2ZWk8F5VcD1mR9H6TyU3E0BJa"
 INFINITY_URL = "https://infinity-search.fun/find.php"
@@ -1239,8 +1450,6 @@ ai_messages = {}
 
 pending_sub_msg = {}
 
-SIGNATURE = "\n\nАктуал бот - https://t.me/+b8bOPT4JSYJhZTMy"
-
 def check_subscription(user_id: int) -> bool:
     try:
         member = bot.get_chat_member(CHANNEL_ID, user_id)
@@ -1505,6 +1714,7 @@ def get_enter_menu():
     markup.add(types.InlineKeyboardButton("Поиск по лицу", callback_data="menu_face"))
     markup.add(types.InlineKeyboardButton("Логгер", callback_data="menu_logger"))
     markup.add(types.InlineKeyboardButton("Временная почта", callback_data="menu_tempmail"))
+    markup.add(types.InlineKeyboardButton("Прокси генератор", callback_data="search_proxy"))
     markup.add(types.InlineKeyboardButton("Назад", callback_data="back_main"))
     return markup
 
@@ -1526,6 +1736,10 @@ def get_search_menu():
         ("Пароль", "search_password"),
         ("Соц. сети", "search_social"),
         ("Telegram", "search_fanstat"),
+        ("Google", "search_google"),
+        ("TON Wallet", "search_ton"),
+        ("GiftMap", "search_blackeye"),
+        ("GitHub", "search_github"),
         ("Назад", "back_main")
     ]
     for i in range(0, len(buttons), 2):
@@ -1725,16 +1939,14 @@ def send_face_page(chat_id, page):
         )
     
     markup = types.InlineKeyboardMarkup(row_width=2)
-    buttons = []
     
+    nav_buttons = []
     if page > 0:
-        buttons.append(types.InlineKeyboardButton("Назад", callback_data=f"face_page_{page-1}"))
-    
+        nav_buttons.append(types.InlineKeyboardButton(" Назад", callback_data=f"face_page_{page-1}"))
     if page < total_pages - 1:
-        buttons.append(types.InlineKeyboardButton("Вперед", callback_data=f"face_page_{page+1}"))
-    
-    if buttons:
-        markup.row(*buttons)
+        nav_buttons.append(types.InlineKeyboardButton("Вперёд ", callback_data=f"face_page_{page+1}"))
+    if nav_buttons:
+        markup.row(*nav_buttons)
     
     markup.row(types.InlineKeyboardButton("Вернуться в меню", callback_data="face_back_to_menu"))
     
@@ -1753,38 +1965,92 @@ def process_fanstat(message):
 
     query = message.text.strip()
     if not query:
-        bot.send_message(chat_id, "Введите Telegram ID или username.")
+        bot.send_message(chat_id, "Введите username.")
         return
 
     status_msg = bot.send_message(chat_id, "Ищу информацию...")
 
     def _do_search():
         try:
-            result = tg_osint_get_transfer_history(query)
+            result_text = ""
             
-            if result is None:
+            # OSINT API (Kartoshka)
+            osint_result = tg_osint_get_transfer_history(query)
+            if osint_result:
+                lines = osint_result.split("\n")
+                clean_lines = [l for l in lines if not l.startswith("=") and not l.startswith("  ")]
+                result_text += "\n".join(clean_lines) + "\n\n"
+            
+            # QuickFlow
+            quickflow_result = quickflow_search(query.replace("@", ""))
+            if quickflow_result:
+                qf = quickflow_result
+                result_text += "📊 QUICKFLOW\n"
+                result_text += f"ID: {qf.get('id', 'Нет')}\n"
+                result_text += f"Имя: {qf.get('first_name', 'Нет')}\n"
+                result_text += f"Username: @{qf.get('username', 'Нет')}\n"
+                result_text += f"Премиум: {'Да' if qf.get('is_premium') else 'Нет'}\n"
+                result_text += f"Дата регистрации: {qf.get('creation_date_formatted', 'Нет')}\n"
+                if qf.get('birthday'):
+                    bd = qf['birthday']
+                    result_text += f"День рождения: {bd.get('formatted', 'Нет')}\n"
+                if qf.get('personal_channel'):
+                    pc = qf['personal_channel']
+                    result_text += f"Канал: {pc.get('title', 'Нет')} (@{pc.get('username', '')})\n"
+                if qf.get('gift_connections'):
+                    gc = qf['gift_connections']
+                    result_text += f"Подарков получено: {len(gc.get('received_from', []))}\n"
+                    result_text += f"Подарков отправлено: {len(gc.get('sent_to', []))}\n"
+            
+            if not result_text:
                 bot.delete_message(chat_id, status_msg.message_id)
                 markup = types.InlineKeyboardMarkup()
-                markup.add(types.InlineKeyboardButton("Назад", callback_data="menu_search"))
+                markup.row(types.InlineKeyboardButton("↩ Вернуться в меню", callback_data="menu_search"))
                 bot.send_message(chat_id, "Пользователь не найден или API недоступен.", reply_markup=markup)
                 return
 
             bot.delete_message(chat_id, status_msg.message_id)
-            text = result
-
-            markup = types.InlineKeyboardMarkup()
-            markup.add(types.InlineKeyboardButton("История имен", callback_data=f"tg_names_{query}"))
-            markup.add(types.InlineKeyboardButton("Назад", callback_data="menu_search"))
-            bot.send_message(chat_id, text, reply_markup=markup)
+            
+            markup = types.InlineKeyboardMarkup(row_width=2)
+            markup.row(types.InlineKeyboardButton("🎁 История подарков", callback_data=f"tg_gifts_{query}"))
+            markup.row(types.InlineKeyboardButton("↩ Вернуться в меню", callback_data="menu_search"))
+            bot.send_message(chat_id, result_text[:4000], reply_markup=markup)
 
         except Exception as e:
             try:
                 bot.delete_message(chat_id, status_msg.message_id)
             except:
                 pass
-            bot.send_message(chat_id, f"Ошибка: {e}")
+            markup = types.InlineKeyboardMarkup()
+            markup.row(types.InlineKeyboardButton("↩ Вернуться в меню", callback_data="menu_search"))
+            bot.send_message(chat_id, f"Ошибка: {e}", reply_markup=markup)
 
     threading.Thread(target=_do_search, daemon=True).start()
+
+@bot.callback_query_handler(func=lambda call: call.data.startswith("tg_gifts_"))
+def handle_tg_gifts(call):
+    query = call.data.replace("tg_gifts_", "")
+    chat_id = call.message.chat.id
+    try:
+        bot.delete_message(chat_id, call.message.message_id)
+    except:
+        pass
+    status_msg = bot.send_message(chat_id, "Загружаю историю подарков...")
+    def _load():
+        result = tg_osint_get_transfer_history(query)
+        bot.delete_message(chat_id, status_msg.message_id)
+        if result:
+            lines = result.split("\n")
+            clean_lines = [l for l in lines if not l.startswith("=")]
+            text = "\n".join(clean_lines)
+            markup = types.InlineKeyboardMarkup()
+            markup.row(types.InlineKeyboardButton("↩ Вернуться в меню", callback_data="menu_search"))
+            bot.send_message(chat_id, text[:4000], reply_markup=markup)
+        else:
+            markup = types.InlineKeyboardMarkup()
+            markup.row(types.InlineKeyboardButton("↩ Вернуться в меню", callback_data="menu_search"))
+            bot.send_message(chat_id, "История подарков не найдена.", reply_markup=markup)
+    threading.Thread(target=_load, daemon=True).start()
 
 def process_email(message):
     _clear_pending_prompt(message.chat.id)
@@ -2230,6 +2496,181 @@ def process_mailing(message):
     
     threading.Thread(target=_do_mailing, daemon=True).start()
 
+# ====== НОВЫЕ ОБРАБОТЧИКИ ======
+
+def process_google_search(message):
+    chat_id = message.chat.id
+    query = message.text.strip()
+    if not query:
+        bot.send_message(chat_id, "Введите запрос.")
+        return
+    user_google_data[chat_id] = {"query": query, "page": 0}
+    send_google_page(chat_id, 0)
+
+def send_google_page(chat_id, page):
+    data = user_google_data.get(chat_id)
+    if not data:
+        return
+    query = data["query"]
+    start_index = page * 5 + 1
+    result = google_search(query, start=start_index)
+    if not result or "items" not in result:
+        bot.send_message(chat_id, "Ничего не найдено.")
+        return
+    items = result["items"]
+    total = len(items)
+    user_google_data[chat_id]["results"] = items
+    user_google_data[chat_id]["page"] = page
+    user_google_data[chat_id]["total"] = total
+    
+    text = f"Google: {query}\n\n"
+    for idx, item in enumerate(items, start=start_index):
+        title = item.get("title", "Нет заголовка")
+        link = item.get("link", "Нет ссылки")
+        snippet = item.get("snippet", "Нет описания")[:200]
+        text += f"{idx}. {title}\n   {link}\n   {snippet}\n\n"
+    
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(types.InlineKeyboardButton("◀ Назад", callback_data=f"google_page_{page-1}"))
+    if total == 5:
+        nav_buttons.append(types.InlineKeyboardButton("Вперёд ▶", callback_data=f"google_page_{page+1}"))
+    if nav_buttons:
+        markup.row(*nav_buttons)
+    
+    markup.row(types.InlineKeyboardButton("↩ Вернуться в меню", callback_data="menu_search"))
+    
+    bot.send_message(chat_id, text[:4000], reply_markup=markup)
+
+def process_ton_wallet(message):
+    chat_id = message.chat.id
+    address = message.text.strip()
+    if not address.startswith("EQ"):
+        bot.send_message(chat_id, "Адрес должен начинаться с 'EQ'")
+        return
+    user_ton_data[chat_id] = {"address": address, "page": 0}
+    send_ton_page(chat_id, 0)
+
+def send_ton_page(chat_id, page):
+    data = user_ton_data.get(chat_id)
+    if not data:
+        return
+    address = data["address"]
+    limit = 5
+    offset = page * limit
+    
+    result = ton_get_transactions(address, limit, offset)
+    if not result or "transactions" not in result:
+        bot.send_message(chat_id, "Транзакции не найдены.")
+        return
+    
+    txs = result["transactions"]
+    total = len(txs)
+    user_ton_data[chat_id]["transactions"] = txs
+    user_ton_data[chat_id]["page"] = page
+    user_ton_data[chat_id]["total"] = total
+    
+    text = f"TON ТРАНЗАКЦИИ\nАдрес: {address}\n\n"
+    if total == 0:
+        text += "Нет транзакций."
+    else:
+        for idx, tx in enumerate(txs, start=offset + 1):
+            value = tx.get("in_msg", {}).get("value", "0")
+            text += f"{idx}. {tx.get('now', 'Нет даты')} | {value} TON\n"
+    
+    markup = types.InlineKeyboardMarkup(row_width=2)
+    
+    nav_buttons = []
+    if page > 0:
+        nav_buttons.append(types.InlineKeyboardButton("◀ Назад", callback_data=f"ton_page_{page-1}"))
+    if total == limit:
+        nav_buttons.append(types.InlineKeyboardButton("Вперёд ▶", callback_data=f"ton_page_{page+1}"))
+    if nav_buttons:
+        markup.row(*nav_buttons)
+    
+    markup.row(types.InlineKeyboardButton("↩ Вернуться в меню", callback_data="menu_search"))
+    
+    bot.send_message(chat_id, text, reply_markup=markup)
+
+def process_blackeye(message):
+    chat_id = message.chat.id
+    query = message.text.strip()
+    if not query:
+        bot.send_message(chat_id, "Введите username или ID.")
+        return
+    status = bot.send_message(chat_id, f"Ищу: {query}...")
+    def _do():
+        # Пробуем как username
+        result = blackeye_gift_user(query)
+        if not result:
+            result = blackeye_gift_search(query)
+        bot.delete_message(chat_id, status.message_id)
+        if result:
+            text = "GiftMap\n\n"
+            if "user" in result:
+                u = result["user"]
+                text += f"ID: {u.get('id', 'Нет')}\n"
+                text += f"Username: @{u.get('username', 'Нет')}\n"
+                text += f"Имя: {u.get('first_name', 'Нет')} {u.get('last_name', '')}\n"
+                text += f"Премиум: {'Да' if u.get('is_premium') else 'Нет'}\n"
+            if "links" in result:
+                text += f"\nСвязей: {len(result['links'])}\n"
+            markup = types.InlineKeyboardMarkup()
+            markup.row(types.InlineKeyboardButton("↩ Вернуться в меню", callback_data="menu_search"))
+            bot.send_message(chat_id, text[:4000], reply_markup=markup)
+        else:
+            markup = types.InlineKeyboardMarkup()
+            markup.row(types.InlineKeyboardButton("↩ Вернуться в меню", callback_data="menu_search"))
+            bot.send_message(chat_id, "Ничего не найдено.", reply_markup=markup)
+    threading.Thread(target=_do, daemon=True).start()
+
+def process_github(message):
+    chat_id = message.chat.id
+    username = message.text.strip()
+    if not username:
+        bot.send_message(chat_id, "Введите username GitHub.")
+        return
+    status = bot.send_message(chat_id, f"Ищу: {username}...")
+    def _do():
+        user = github_user_info(username)
+        bot.delete_message(chat_id, status.message_id)
+        text = f"GitHub: {username}\n\n"
+        if user:
+            text += f"Имя: {user.get('name', 'Нет')}\n"
+            text += f"Компания: {user.get('company', 'Нет')}\n"
+            text += f"Локация: {user.get('location', 'Нет')}\n"
+            text += f"Репозиториев: {user.get('public_repos', 0)}\n"
+            text += f"Подписчиков: {user.get('followers', 0)}\n"
+            text += f"Подписок: {user.get('following', 0)}\n"
+            text += f"Аккаунт создан: {user.get('created_at', 'Нет')[:10]}\n"
+            text += f"Био: {user.get('bio', 'Нет')}\n"
+        else:
+            text += "Пользователь не найден."
+        markup = types.InlineKeyboardMarkup()
+        markup.row(types.InlineKeyboardButton("↩ Вернуться в меню", callback_data="menu_search"))
+        bot.send_message(chat_id, text[:4000], reply_markup=markup)
+    threading.Thread(target=_do, daemon=True).start()
+
+@bot.message_handler(commands=['proxy'])
+@require_subscription
+def cmd_proxy(message):
+    chat_id = message.chat.id
+    status = bot.send_message(chat_id, "Генерация прокси...")
+    def _do():
+        proxies = generate_proxies()
+        bot.delete_message(chat_id, status.message_id)
+        if proxies:
+            with open("proxies.txt", "rb") as f:
+                bot.send_document(chat_id, f, caption=f"Найдено {len(proxies)} прокси")
+        else:
+            bot.send_message(chat_id, "Прокси не найдены.")
+        markup = types.InlineKeyboardMarkup()
+        markup.row(types.InlineKeyboardButton("↩ Вернуться в меню", callback_data="menu_search"))
+        bot.send_message(chat_id, "Готово.", reply_markup=markup)
+    threading.Thread(target=_do, daemon=True).start()
+
 @bot.callback_query_handler(func=lambda call: call.data == "check_sub")
 def handle_check_subscription(call):
     user_id = call.from_user.id
@@ -2380,6 +2821,7 @@ def _slash_ask(message, prompt, handler):
     msg = bot.send_message(message.chat.id, prompt)
     bot.register_next_step_handler(msg, handler)
 
+# ====== CALLBACK HANDLER ======
 @bot.callback_query_handler(func=lambda call: True)
 @require_subscription
 def handle_callback(call):
@@ -2525,118 +2967,81 @@ def handle_callback(call):
             pass
         msg = bot.send_message(chat_id, "Введите Telegram ID или @username для поиска:")
         bot.register_next_step_handler(msg, process_fanstat)
-    elif call.data.startswith("tg_names_"):
-        query = call.data.replace("tg_names_", "")
+        bot.answer_callback_query(call.id, show_alert=False)
+    elif call.data == "search_google":
         chat_id = call.message.chat.id
         try:
             bot.delete_message(chat_id, call.message.message_id)
         except:
             pass
-        status_msg = bot.send_message(chat_id, "Загружаю историю имен...")
-        def _load_names():
-            try:
-                result = tg_osint_get_name_history(query)
-                if result is None:
-                    bot.delete_message(chat_id, status_msg.message_id)
-                    bot.send_message(chat_id, "История не найдена.")
-                    return
-                bot.delete_message(chat_id, status_msg.message_id)
-                text = result
-                markup = types.InlineKeyboardMarkup()
-                markup.add(types.InlineKeyboardButton("Назад", callback_data="menu_search"))
-                framed_text = f"<blockquote>{text}</blockquote>"
-                bot.send_message(chat_id, framed_text, reply_markup=markup, parse_mode="HTML")
-            except Exception as e:
-                try:
-                    bot.delete_message(chat_id, status_msg.message_id)
-                except:
-                    pass
-                bot.send_message(chat_id, f"Ошибка: {e}")
-        threading.Thread(target=_load_names, daemon=True).start()
+        msg = bot.send_message(chat_id, "Введите запрос для Google Search:")
+        bot.register_next_step_handler(msg, process_google_search)
         bot.answer_callback_query(call.id, show_alert=False)
-    elif call.data.startswith("generate_photo_"):
-        parts = call.data.split("_")
-        user_id = int(parts[2])
-        chat_id = int(parts[3])
-        try:
-            bot.delete_message(chat_id, call.message.message_id)
-        except:
-            pass
-        msg = bot.send_message(chat_id, "Введите промпт для генерации фото:")
-        bot.register_next_step_handler(msg, lambda m: process_photo_prompt(m, user_id, chat_id))
-        bot.answer_callback_query(call.id, show_alert=False)
-    elif call.data == "menu_profile":
+    elif call.data.startswith("google_page_"):
+        page = int(call.data.replace("google_page_", ""))
         chat_id = call.message.chat.id
         try:
             bot.delete_message(chat_id, call.message.message_id)
         except:
             pass
-        profile_text = f"Профиль\n\nID: {user_id}\nЗапросов: безлимит\n\nПоддержка — @CLTaobot"
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("Назад", callback_data="back_main"))
-        m = bot.send_message(chat_id, profile_text, reply_markup=markup)
-        last_menu_msg[chat_id] = m.message_id
+        send_google_page(chat_id, page)
         bot.answer_callback_query(call.id, show_alert=False)
-    elif call.data == "menu_subscription":
+    elif call.data == "search_ton":
         chat_id = call.message.chat.id
         try:
             bot.delete_message(chat_id, call.message.message_id)
         except:
             pass
-        username = call.from_user.username if call.from_user.username else " Пользователь"
-        subscription_text = f"Подписка\n\n{username} какая подписка? Вы свободны."
-        markup = types.InlineKeyboardMarkup()
-        markup.add(types.InlineKeyboardButton("Назад", callback_data="back_main"))
-        m = bot.send_message(chat_id, subscription_text, reply_markup=markup)
-        last_menu_msg[chat_id] = m.message_id
+        msg = bot.send_message(chat_id, "Введите адрес TON кошелька (EQ...):")
+        bot.register_next_step_handler(msg, process_ton_wallet)
         bot.answer_callback_query(call.id, show_alert=False)
-    elif call.data == "menu_tempmail":
+    elif call.data.startswith("ton_page_"):
+        page = int(call.data.replace("ton_page_", ""))
         chat_id = call.message.chat.id
         try:
             bot.delete_message(chat_id, call.message.message_id)
         except:
             pass
-        msg = bot.send_message(chat_id, "Выберите действие с временной почтой:", 
-                              reply_markup=types.InlineKeyboardMarkup().add(
-                                  types.InlineKeyboardButton("Создать почту", callback_data="tempmail_create"),
-                                  types.InlineKeyboardButton("Назад", callback_data="back_main")
-                              ))
-        last_menu_msg[chat_id] = msg.message_id
+        send_ton_page(chat_id, page)
         bot.answer_callback_query(call.id, show_alert=False)
-    elif call.data == "tempmail_create":
+    elif call.data == "search_blackeye":
         chat_id = call.message.chat.id
         try:
             bot.delete_message(chat_id, call.message.message_id)
         except:
             pass
-        status_msg = bot.send_message(chat_id, "Создаю временную почту...")
-        def _create_tempmail():
-            try:
-                import asyncio
-                mail_data = asyncio.run(generate_mailtm())
-                if not mail_data:
-                    mail_data = asyncio.run(generate_guerrilla())
-                
-                if mail_data:
-                    save_mail(mail_data.split(":")[0], mail_data.split(":")[1], mail_data.split(":")[2])
-                    bot.delete_message(chat_id, status_msg.message_id)
-                    result_text = f"Почта создана!\n\nАдрес: {mail_data.split(':')[1]}"
-                    markup = types.InlineKeyboardMarkup()
-                    markup.add(types.InlineKeyboardButton("Назад", callback_data="menu_tempmail"))
-                    bot.send_message(chat_id, result_text, reply_markup=markup)
-                else:
-                    bot.delete_message(chat_id, status_msg.message_id)
-                    bot.send_message(chat_id, "Ошибка при создании почты")
-            except Exception as e:
-                try:
-                    bot.delete_message(chat_id, status_msg.message_id)
-                except:
-                    pass
-                bot.send_message(chat_id, f"Ошибка: {e}")
-        
-        threading.Thread(target=_create_tempmail, daemon=True).start()
+        msg = bot.send_message(chat_id, "Введите username или ID для поиска в GiftMap:")
+        bot.register_next_step_handler(msg, process_blackeye)
         bot.answer_callback_query(call.id, show_alert=False)
-        
+    elif call.data == "search_github":
+        chat_id = call.message.chat.id
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        msg = bot.send_message(chat_id, "Введите username для поиска на GitHub:")
+        bot.register_next_step_handler(msg, process_github)
+        bot.answer_callback_query(call.id, show_alert=False)
+    elif call.data == "search_proxy":
+        chat_id = call.message.chat.id
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        status_msg = bot.send_message(chat_id, "Генерация прокси...")
+        def _do():
+            proxies = generate_proxies()
+            bot.delete_message(chat_id, status_msg.message_id)
+            if proxies:
+                with open("proxies.txt", "rb") as f:
+                    bot.send_document(chat_id, f, caption=f"Найдено {len(proxies)} прокси")
+            else:
+                bot.send_message(chat_id, "Прокси не найдены.")
+            markup = types.InlineKeyboardMarkup()
+            markup.row(types.InlineKeyboardButton("↩ Вернуться в меню", callback_data="menu_search"))
+            bot.send_message(chat_id, "Готово.", reply_markup=markup)
+        threading.Thread(target=_do, daemon=True).start()
+        bot.answer_callback_query(call.id, show_alert=False)
     elif call.data == "search_email":
         chat_id = call.message.chat.id
         try:
@@ -2763,6 +3168,85 @@ def handle_callback(call):
         msg = bot.send_message(chat_id, "Введите номер телефона для проверки соц. сетей:")
         bot.register_next_step_handler(msg, process_social)
         bot.answer_callback_query(call.id, show_alert=False)
+    elif call.data == "menu_tempmail":
+        chat_id = call.message.chat.id
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        msg = bot.send_message(chat_id, "Выберите действие с временной почтой:", 
+                              reply_markup=types.InlineKeyboardMarkup().add(
+                                  types.InlineKeyboardButton("Создать почту", callback_data="tempmail_create"),
+                                  types.InlineKeyboardButton("Назад", callback_data="back_main")
+                              ))
+        last_menu_msg[chat_id] = msg.message_id
+        bot.answer_callback_query(call.id, show_alert=False)
+    elif call.data == "tempmail_create":
+        chat_id = call.message.chat.id
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        status_msg = bot.send_message(chat_id, "Создаю временную почту...")
+        def _create_tempmail():
+            try:
+                import asyncio
+                mail_data = asyncio.run(generate_mailtm())
+                if not mail_data:
+                    mail_data = asyncio.run(generate_guerrilla())
+                
+                if mail_data:
+                    save_mail(mail_data.split(":")[0], mail_data.split(":")[1], mail_data.split(":")[2])
+                    bot.delete_message(chat_id, status_msg.message_id)
+                    result_text = f"Почта создана!\n\nАдрес: {mail_data.split(':')[1]}"
+                    markup = types.InlineKeyboardMarkup()
+                    markup.add(types.InlineKeyboardButton("Назад", callback_data="menu_tempmail"))
+                    bot.send_message(chat_id, result_text, reply_markup=markup)
+                else:
+                    bot.delete_message(chat_id, status_msg.message_id)
+                    bot.send_message(chat_id, "Ошибка при создании почты")
+            except Exception as e:
+                try:
+                    bot.delete_message(chat_id, status_msg.message_id)
+                except:
+                    pass
+                bot.send_message(chat_id, f"Ошибка: {e}")
+        
+        threading.Thread(target=_create_tempmail, daemon=True).start()
+        bot.answer_callback_query(call.id, show_alert=False)
+        
+    elif call.data == "menu_profile":
+        chat_id = call.message.chat.id
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        profile_text = f"Профиль\n\nID: {user_id}\nЗапросов: безлимит\n\nПоддержка — @CLTaobot"
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("Назад", callback_data="back_main"))
+        m = bot.send_message(chat_id, profile_text, reply_markup=markup)
+        last_menu_msg[chat_id] = m.message_id
+        bot.answer_callback_query(call.id, show_alert=False)
+    elif call.data == "menu_subscription":
+        chat_id = call.message.chat.id
+        try:
+            bot.delete_message(chat_id, call.message.message_id)
+        except:
+            pass
+        username = call.from_user.username if call.from_user.username else "Пользователь"
+        subscription_text = f"Подписка\n\n{username} какая подписка? Вы свободны."
+        markup = types.InlineKeyboardMarkup()
+        markup.add(types.InlineKeyboardButton("Назад", callback_data="back_main"))
+        m = bot.send_message(chat_id, subscription_text, reply_markup=markup)
+        last_menu_msg[chat_id] = m.message_id
+        bot.answer_callback_query(call.id, show_alert=False)
 
 if __name__ == '__main__':
-    bot.infinity_polling()
+    while True:
+        try:
+            bot.infinity_polling(timeout=60, long_polling_timeout=60)
+        except Exception as e:
+            print(f"Ошибка: {e}")
+            print("Переподключение через 10 секунд...")
+            time.sleep(10)
+            continue
