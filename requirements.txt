@@ -1,5 +1,2 @@
-telebot
-httpx
+pyTelegramBotAPI
 requests
-beautifulsoup4
-aiohttp
